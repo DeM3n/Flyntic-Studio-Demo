@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://c8x4j5m3k3p6"]
 
 [ext_resource type="Script" uid="uid://c1ndok6tnlbca" path="res://Main.gd" id="1_main"]
-[ext_resource type="Texture2D" uid="uid://16gqnt3pain1" path="res://Help.svg" id="2_cm0pq"]
+[ext_resource type="Texture2D" uid="uid://jrurmagv1kct" path="res://manual (1).png" id="2_cm0pq"]
 [ext_resource type="Script" uid="uid://b2c633c88u7wr" path="res://tutorial_overlay.gd" id="2_uu6xs"]
 [ext_resource type="Shader" uid="uid://cihs6j4ireknf" path="res://Highlight.gdshader" id="3_r0du0"]
 
@@ -139,6 +139,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 rotation = 2.5842412e-05
+theme_override_constants/separation = 10
 
 [node name="Title" type="Label" parent="Root/TopBar/H" unique_id=1470047877]
 layout_mode = 2
@@ -200,12 +201,13 @@ layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="HelpButton" type="TextureButton" parent="Root/TopBar/H" unique_id=1128753534]
-custom_minimum_size = Vector2(40, 30)
+custom_minimum_size = Vector2(40, 40)
 layout_mode = 2
 texture_normal = ExtResource("2_cm0pq")
 stretch_mode = 0
 
 [node name="Status" type="Label" parent="Root/TopBar/H" unique_id=950450415]
+custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.65, 0.65, 0.65, 1)
 theme_override_font_sizes/font_size = 11

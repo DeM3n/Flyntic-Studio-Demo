@@ -61,7 +61,22 @@ var CATEGORIES := {
 	"BATTERY": ["Lipo 4S 1500mAh"],
 	"ELECTRONICS": ["F4 Flight Controller", "4-in-1 ESC"],
 }
+#======= Block category
+var BLOCK_CATEGORIES := {
+	"Events": [
+		{"type": "start", "label": "When ⚐ clicked", "color": Color(0.85, 0.65, 0)},
+	],
+	"Flight": [
+		{"type": "take_off", "label": "Take Off",        "color": Color(0.3, 0.6, 1.0)},
+		{"type": "land",     "label": "Land drone",      "color": Color(0.9, 0.5, 0.1)},
+	],
+	"Motion": [
+		{"type": "forward",  "label": "Forward [ 50 ] cm", "color": Color(0.25, 0.55, 0.95)},
+		{"type": "hover",    "label": "Hover (2s)",         "color": Color(0.2, 0.5, 0.9)},
+	],
+}
 
+var _block_cat_collapsed  := {}  # { "Events": false, "Flight": true, ... }
 var COMPONENTS := {
 	"PVC Pipe Frame": {
 		"type": "Frame", "weight": 250, "thrust": 0, "capacity": 0,
@@ -158,20 +173,33 @@ func _ready():
 	_build_floor()
 	_build_grid()
 	_place("PVC Pipe Frame", Vector3.ZERO)
+	_focus_camera_on_drone()
 	_update_all()
 	play_btn.pressed.connect(_on_play)
 	pause_btn.pressed.connect(_on_pause)
 	stop_btn.pressed.connect(_on_stop)
 	comp_list.item_selected.connect(_on_item_selected)
+	# ==================== HIERARCHY SETUP ====================
+	
 	hier_tree.item_selected.connect(_on_hier_item_selected)
 	hier_del_btn.pressed.connect(_remove_selected)
+	hier_tree.hide_root = true
+	hier_tree.columns = 1
+	hier_tree.allow_reselect = true
+	hier_tree.hide_folding = false
+	hier_tree.enable_recursive_folding = true
+	
+	_build_hierarchy_tree()
+	
 	_setup_blocks()
 	_create_trash_zone()
 	# Pre-populate workspace with a standard 'When flag clicked' stack
 	_create_block("start", "When ⚐ clicked", Color(0.85, 0.65, 0), Vector2(50, 50))
 	# Initialize physics bridge
 	_init_bridge()
+	_setup_wiring_tab()
 	_log("Flyntic Studio initialized", "success")
+
 
 func _init_bridge():
 	var bridge_script = load("res://PhysicsBridge.gd")
@@ -195,40 +223,126 @@ func _on_bridge_disconnected():
 	bridge_connected = false
 	_log("Bridge: Disconnected — using kinematic fallback", "warning")
 
+#func _setup_blocks():
+	## Wire up toolbox buttons to spawn blocks
+	#for child in toolbox_v.get_children():
+		#if is_instance_valid(child) and (child is Button or child is Panel):
+			#child.gui_input.connect(_on_toolbox_input.bind(child))
+#
+#func _on_toolbox_input(event, node):
+	#if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		#var type = node.name.to_lower()
+		#var label = ""
+		#var color = Color(1, 0.7, 0)
+		#
+		#match type:
+			#"b1": # Events
+				#label = "When ⚐ clicked"
+				#type = "start"
+			#"bt1": # Take off
+				#label = "Take Off"
+				#type = "take_off"
+				#color = Color(0.3, 0.6, 1.0)
+			#"bm1": # Forward
+				#label = "Forward [ 50 ] cm"
+				#type = "forward"
+				#color = Color(0.25, 0.55, 0.95)
+			#"bm2": # Hover
+				#label = "Hover (2s)"
+				#type = "hover"
+				#color = Color(0.2, 0.5, 0.9)
+			#"bl1": # Land
+				#label = "Land drone"
+				#type = "land"
+				#color = Color(0.9, 0.5, 0.1)
+#
+		#_create_block(type, label, color, get_global_mouse_position() - workspace.global_position + Vector2(10, 0))
+
 func _setup_blocks():
-	# Wire up toolbox buttons to spawn blocks
-	for child in toolbox_v.get_children():
-		if is_instance_valid(child) and (child is Button or child is Panel):
-			child.gui_input.connect(_on_toolbox_input.bind(child))
+	# Khởi tạo trạng thái collapse (mặc định: tất cả mở)
+	for cat in BLOCK_CATEGORIES:
+		if not _cat_collapsed.has(cat):
+			_block_cat_collapsed [cat] = false
+		_build_toolbox()
 
 func _on_toolbox_input(event, node):
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		var type = node.name.to_lower()
-		var label = ""
-		var color = Color(1, 0.7, 0)
-		
-		match type:
-			"b1": # Events
-				label = "When ⚐ clicked"
-				type = "start"
-			"bt1": # Take off
-				label = "Take Off"
-				type = "take_off"
-				color = Color(0.3, 0.6, 1.0)
-			"bm1": # Forward
-				label = "Forward [ 50 ] cm"
-				type = "forward"
-				color = Color(0.25, 0.55, 0.95)
-			"bm2": # Hover
-				label = "Hover (2s)"
-				type = "hover"
-				color = Color(0.2, 0.5, 0.9)
-			"bl1": # Land
-				label = "Land drone"
-				type = "land"
-				color = Color(0.9, 0.5, 0.1)
+	if event is InputEventMouseButton \
+	and event.button_index == MOUSE_BUTTON_LEFT \
+	and event.pressed:
+		if not node.has_meta("block_type"):
+			return
+		var type:  String = node.get_meta("block_type")
+		var label: String = node.get_meta("block_label")
+		var color: Color  = node.get_meta("block_color")
+		_create_block(type, label, color,
+			get_global_mouse_position() - workspace.global_position + Vector2(10, 0))
 
-		_create_block(type, label, color, get_global_mouse_position() - workspace.global_position + Vector2(10, 0))
+func _build_toolbox():
+	# Xóa hết children cũ
+	for child in toolbox_v.get_children():
+		child.queue_free()
+
+	for cat in BLOCK_CATEGORIES:
+		# ── Header button ──
+		var header = Button.new()
+		var is_open = not _cat_collapsed.get(cat, false)
+		var arrow = "▾" if is_open else "▸"
+		header.text = arrow + " " + cat
+		header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		header.flat = false
+		header.custom_minimum_size = Vector2(0, 32)
+		
+		# Style header
+		var sb = StyleBoxFlat.new()
+		sb.bg_color = Color(0.18, 0.18, 0.22)
+		sb.corner_radius_top_left    = 6
+		sb.corner_radius_top_right   = 6
+		sb.corner_radius_bottom_left = 6
+		sb.corner_radius_bottom_right = 6
+		header.add_theme_stylebox_override("normal", sb)
+		header.add_theme_font_size_override("font_size", 12)
+		
+		toolbox_v.add_child(header)
+
+		# ── Block buttons trong category này ──
+		var blocks_in_cat: Array[Button] = []
+		for entry in BLOCK_CATEGORIES[cat]:
+			var btn = Button.new()
+			btn.text = entry["label"]
+			btn.custom_minimum_size = Vector2(0, 36)
+			btn.visible = is_open
+
+			var bsb = StyleBoxFlat.new()
+			var c: Color = entry["color"]
+			bsb.bg_color = c
+			bsb.corner_radius_top_left    = 8
+			bsb.corner_radius_top_right   = 8
+			bsb.corner_radius_bottom_left = 8
+			bsb.corner_radius_bottom_right = 8
+			btn.add_theme_stylebox_override("normal", bsb)
+			btn.add_theme_font_size_override("font_size", 11)
+
+			# Lưu metadata để _on_toolbox_input biết type
+			btn.set_meta("block_type",  entry["type"])
+			btn.set_meta("block_label", entry["label"])
+			btn.set_meta("block_color", entry["color"])
+
+			btn.gui_input.connect(_on_toolbox_input.bind(btn))
+			toolbox_v.add_child(btn)
+			blocks_in_cat.append(btn)
+
+		# Toggle khi click header — dùng closure capture
+		var cat_name = cat  # capture for lambda
+		header.pressed.connect(func():
+			_cat_collapsed[cat_name] = not _cat_collapsed.get(cat_name, false)
+			var now_open = not _cat_collapsed[cat_name]
+			header.text = ("▾ " if now_open else "▸ ") + cat_name
+			for b in blocks_in_cat:
+				if is_instance_valid(b):
+					b.visible = now_open)
+
+	# Thêm trash zone sau cùng
+	_create_trash_zone()
 
 var _dragging_block: Panel = null
 
@@ -453,22 +567,7 @@ func _check_snapping(moving_block: Panel):
 			style.bg_color.a = 0.25
 		snap_preview.add_theme_stylebox_override("panel", style)
 
-	# Thực hiện snap khi thả
-	#if best_parent and is_instance_valid(best_parent):
-		#
-		#workspace.remove_child(moving_block)
-		#best_parent.add_child(moving_block)
-		#
-		#var target_pos = Vector2(0, best_parent.size.y)
-		#moving_block.position = target_pos + Vector2(0, -15)
-#
-		#
-		#var tween = create_tween()
-		#tween.set_ease(Tween.EASE_OUT)
-		#tween.set_trans(Tween.TRANS_ELASTIC)
-		#tween.tween_property(moving_block, "position", target_pos, 0.4)
-		#_play_snap_sound()  # ← ĐÂY, sau tween, trước _log
-		#_log("Snapped to stack", "success")
+
 	if best_parent and is_instance_valid(best_parent):
 		# Target = ngay bên dưới best_parent, cùng X
 		print("best_parent.position: ", best_parent.position)
@@ -503,22 +602,22 @@ func _get_all_blocks(parent_node) -> Array:
 	return list
 
 # ──────────────────────────── UI BUILD ────────────────────────────
-func _build_comp_list():
-	comp_list.clear()
-	for cat in CATEGORIES:
-		var ci = comp_list.add_item("▸ " + cat)
-		comp_list.set_item_selectable(ci, false)
-		comp_list.set_item_custom_fg_color(ci, Color(0.5, 0.5, 0.5))
-		for cid in CATEGORIES[cat]:
-			if COMPONENTS.has(cid):
-				var ii = comp_list.add_item("   " + cid)
-				comp_list.set_item_metadata(ii, cid)
-				var c = COMPONENTS[cid]
-				match c.type:
-					"Motor": comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.4, 0.4))
-					"Battery": comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.8, 0.2))
-					"Frame": comp_list.set_item_custom_fg_color(ii, Color(0.7, 0.7, 0.7))
-					_: comp_list.set_item_custom_fg_color(ii, Color(0.6, 0.7, 0.8))
+#func _build_comp_list():
+	#comp_list.clear()
+	#for cat in CATEGORIES:
+		#var ci = comp_list.add_item("▸ " + cat)
+		#comp_list.set_item_selectable(ci, false)
+		#comp_list.set_item_custom_fg_color(ci, Color(0.5, 0.5, 0.5))
+		#for cid in CATEGORIES[cat]:
+			#if COMPONENTS.has(cid):
+				#var ii = comp_list.add_item("   " + cid)
+				#comp_list.set_item_metadata(ii, cid)
+				#var c = COMPONENTS[cid]
+				#match c.type:
+					#"Motor": comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.4, 0.4))
+					#"Battery": comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.8, 0.2))
+					#"Frame": comp_list.set_item_custom_fg_color(ii, Color(0.7, 0.7, 0.7))
+					#_: comp_list.set_item_custom_fg_color(ii, Color(0.6, 0.7, 0.8))
 
 func _build_floor():
 	var m = MeshInstance3D.new()
@@ -586,6 +685,21 @@ func _input(event):
 
 	if event is InputEventMouseButton:
 		var in_canvas = vpc.get_global_rect().has_point(get_global_mouse_position())
+#==========Wiring Mode ======================
+		#if wiring_mode and in_canvas and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not sim_locked:
+			#var hit_port = _raycast_port()
+			#if hit_port:
+				#if not wiring_drag_active:
+					#wiring_drag_active = true
+					#wiring_drag_from = hit_port
+					#wire_drag_mesh = _create_drag_wire()
+					#_log("Wire: From " + hit_port.port_name, "info")
+				#else:
+					#_try_connect_wire(hit_port)
+		#else:
+			#_cancel_wire_drag()
+			#return
+#=================End wiring mode
 		match event.button_index:
 			MOUSE_BUTTON_LEFT:
 				if event.pressed:
@@ -595,6 +709,7 @@ func _input(event):
 								var snap = _find_snap()
 								if snap:
 									_place(cur_id, snap.pos, snap.port, snap.parent_uid)
+									_re_place_ghost_children(snap.parent_uid)
 									_cancel_ghost()
 								else:
 									var mpos = viewport.get_mouse_position()
@@ -606,6 +721,7 @@ func _input(event):
 										#_place(cur_id, ghit + Vector3(0, 0.3, 0))
 										var offset_y = COMPONENTS[cur_id].get("ground_offset", 0.3)
 										_place(cur_id, ghit + Vector3(0, offset_y, 0))
+										_re_place_ghost_children(-1)
 										_cancel_ghost()
 						elif in_canvas:
 							# Try to pick up existing component
@@ -651,7 +767,8 @@ func _input(event):
 			if event.keycode == KEY_R and ghost:
 				ghost_rot += PI / 2
 			if event.keycode == KEY_ESCAPE:
-				_cancel_ghost()
+				if wiring_drag_active:  # ← THÊM
+					_cancel_wire_drag() # ← THÊM
 			if event.keycode == KEY_DELETE or event.keycode == KEY_BACKSPACE:
 				_remove_selected()
 
@@ -671,30 +788,46 @@ func _process(_delta):
 		pivot.global_position += move_vec.normalized() * _delta * speed
 
 	# Update camera transform based on rot/zoom
+	#if tabs.current_tab == 0:
+		#pivot.rotation.y = camera_rot.y
+		#pivot.rotation.x = camera_rot.x
+		#camera.position.z = zoom
+		#camera.position.y = 0 # Camera is child of pivot, pivot handles X/Y rotation
+	# Thay phần update camera trong _process:
 	if tabs.current_tab == 0:
-		pivot.rotation.y = camera_rot.y
-		pivot.rotation.x = camera_rot.x
-		camera.position.z = zoom
-		camera.position.y = 0 # Camera is child of pivot, pivot handles X/Y rotation
-	
+		pivot.rotation = Vector3.ZERO
+		pivot.rotate(Vector3.UP, camera_rot.y)        # Yaw trước (world UP)
+		pivot.rotate(pivot.global_transform.basis.x.normalized(), camera_rot.x)  # Pitch sau (local X)
+		camera.position = Vector3(0, 0, zoom)
+		camera.position.y = 0
+
 	if is_instance_valid(ghost):
 		_move_ghost()
 	if sim_state == "playing":
 		_simulate(_delta)
 	_update_block_snap_preview()
+# WIRING TYPING SHIT
+	if wiring_mode and wiring_drag_active and is_instance_valid(wire_drag_mesh):
+		var mpos = viewport.get_mouse_position()
+		var ro = camera.project_ray_origin(mpos)
+		var rd = camera.project_ray_normal(mpos)
+		var plane = Plane(Vector3.UP, wiring_drag_from.port_pos.y)
+		var hit = plane.intersects_ray(ro, rd)
 
+		if hit:
+			_clear_children(wire_drag_mesh)
+			var to_pos = hit
+			var hover = _raycast_port()
+			var wire_color = Color(0.8, 0.8, 0.1)
+			if hover and hover.uid != wiring_drag_from.uid:
+				if hover.port_type == wiring_drag_from.port_type:
+					wire_color = Color(0.1, 0.9, 0.3)
+					to_pos = hover.port_pos
+				else:
+					wire_color = Color(0.9, 0.1, 0.1)
+			_draw_bezier_wire(wire_drag_mesh, wiring_drag_from.port_pos, to_pos, wire_color)
 
-
-
-
-# Live preview khi đang kéo
-#func _start_live_preview(moving_block: Panel):
-	#if not is_instance_valid(moving_block):
-		#return
-	#
-	## Cập nhật preview mỗi frame khi kéo
-	#set_process(true)
-	#_update_snap_preview(moving_block)
+#ENDING OF WIRING TYPING SHIT
 
 func _update_block_snap_preview():
 # Tìm block đang drag bằng cách scan tất cả blocks
@@ -758,9 +891,39 @@ func _clear_preview():
 
 
 # ──────────────────────────── GHOST / PLACEMENT ───────────────────
+#func _on_item_selected(idx: int):
+	#var id = comp_list.get_item_metadata(idx)
+	#if id == null:
+		#return
+	#if id == "PVC Pipe Frame" or id == "Carbon Fiber Body":
+		#for c in placed:
+			#if c.type == "Frame":
+				#_log("Only one frame allowed!", "error")
+				#return
+	#cur_id = id
+	#_cancel_ghost()
+	#ghost = _build_mesh(id, true)
+	#components_group.add_child(ghost)
+	#_show_snap_hints(id)
+	#
+	## Deselect so it can be clicked again
+	#comp_list.deselect_all()
 func _on_item_selected(idx: int):
-	var id = comp_list.get_item_metadata(idx)
-	if id == null:
+	var meta = comp_list.get_item_metadata(idx)
+	if meta == null:
+		return
+	
+	# Click vào category header → toggle collapse
+	if meta.get("is_category", false):
+		var cat = meta["cat"]
+		_cat_collapsed[cat] = not _cat_collapsed.get(cat, false)
+		_build_comp_list()  # rebuild list
+		comp_list.deselect_all()
+		return
+	
+	# Click vào component → xử lý như cũ
+	var id = meta.get("id", "")
+	if id == "":
 		return
 	if id == "PVC Pipe Frame" or id == "Carbon Fiber Body":
 		for c in placed:
@@ -772,8 +935,6 @@ func _on_item_selected(idx: int):
 	ghost = _build_mesh(id, true)
 	components_group.add_child(ghost)
 	_show_snap_hints(id)
-	
-	# Deselect so it can be clicked again
 	comp_list.deselect_all()
 
 func _move_ghost():
@@ -924,41 +1085,8 @@ func _place(id: String, pos: Vector3, port_name: String = "", parent_uid: int = 
 	_log("Assembled: " + id, "success")
 
 
-func _pick_existing():
-	var mpos = viewport.get_mouse_position()
-	var ro = camera.project_ray_origin(mpos)
-	var rd = camera.project_ray_normal(mpos)
-	
-	var best_uid := -1
-	var best_d := 1000.0
-	
-	for c in placed:
-		if not is_instance_valid(c.node): continue
-		if c.type == "Frame": continue # Don't pick frame
-		var d = ro.distance_to(c.node.global_position) # Simple distance check for picking
-		# check if ray passes near the node
-		var to_node = c.node.global_position - ro
-		var projection = to_node.dot(rd)
-		if projection > 0:
-			var closest_point = ro + rd * projection
-			var dist = closest_point.distance_to(c.node.global_position)
-			if dist < 1.0 and dist < best_d:
-				best_d = dist
-				best_uid = c.uid
-	
-	if best_uid != -1:
-		# Find the entry
-		for i in range(placed.size()):
-			if placed[i].uid == best_uid:
-				var c = placed[i]
-				cur_id = c.id
-				_remove_component(c.uid)
-				# Convert to ghost
-				ghost = _build_mesh(cur_id, true)
-				components_group.add_child(ghost)
-				_show_snap_hints(cur_id)
-				_log("Picking up: " + cur_id, "info")
-				return
+var _ghost_children: Array[Dictionary] = [] 
+
 
 func _rebuild_wires():
 	if sim_state == "playing":
@@ -1296,29 +1424,7 @@ func _on_play():
 		bridge.cmd_arm()
 		_log("Bridge: Drone configured (%.0fg, %d functional motors) & armed" % [tw, motor_with_prop_count], "info")
 
-#func _parse_block_stack(block):
-	#if not is_instance_valid(block): return
-	## Follow Godot hierarchy to find connected blocks
-	#for child in block.get_children():
-		#if is_instance_valid(child) and "block_type" in child:
-			#var val = 0.0
-			## STRICT search for Input field only within this block's immediate UI
-			#var input_node = child.get_node_or_null("input_bg/Input")
-				#
-			#if is_instance_valid(input_node) and input_node is LineEdit:
-				#val = input_node.text.to_float()
-				#if val <= 0.0: val = 50.0 # Default fallback
-			#
-			## Calculate duration based on distance to maintain constant speed
-			## Speed = 2.0 meters/sec (100 units/sec at 0.05 scale)
-			#var duration = max(1.0, (val * 0.05) / 2.0)
-			#
-			#sim_sequence.append({
-				#"type": child.block_type,
-				#"value": val,
-				#"duration": duration
-			#})
-			#_parse_block_stack(child)
+
 func _parse_block_stack(block):
 	if not is_instance_valid(block): return
 	
@@ -1615,7 +1721,6 @@ func _update_all():
 	thrust_val.text = "%.2f kg" % (tt / 1000.0)
 	var ratio = (tt / tw) if tw > 0 else 0.0
 	twr_val.text = "%.2f:1" % ratio
-
 	# Capability badge
 	if ratio >= 2.0:
 		cap_val.text = "Good"
@@ -1631,57 +1736,69 @@ func _update_all():
 	var draw_a = tt * 0.001 * 30 # rough amps estimate
 	var ft_min = (bat_cap / 1000.0 * 60.0 / max(draw_a, 1)) if bat_cap > 0 else 0
 	ft_val.text = "%.1f min" % ft_min
-
 	comp_count.text = "  Components: " + str(placed.size())
-
 	# Diagnostics
 	_update_diagnostics()
-
-	# Hierarchy tree sync
-	hier_tree.clear()
-	var root_item = hier_tree.create_item()
-	root_item.set_text(0, "Drone")
-	# root_item.set_icon(0, preload("res://icon_chip.png")) # If we had one
+	# Hierarchy
+	_build_hierarchy_tree()
 	
-	for c in placed:
-		if not is_instance_valid(c.get("node")): continue
-		var item = hier_tree.create_item(root_item)
-		item.set_text(0, c.id)
-		item.set_metadata(0, c.uid)
-		# item.set_icon(0, preload("res://icon_box.png")) # If we had one
+
 
 func _on_hier_item_selected():
 	var item = hier_tree.get_selected()
 	if item:
 		var uid = item.get_metadata(0)
-		_highlight_component(uid)
-		_log("Selected: " + item.get_text(0), "info")
+		if uid != null:
+			_highlight_component(uid)
+			_log("Selected: " + item.get_text(0), "info")
 
 #func _highlight_component(uid: int):
+	#if uid == null or uid <= 0:
+		#_log("Highlight failed: UID invalid", "error")
+		#return
+	#
+	#_log("Trying to highlight UID: " + str(uid), "info")
+	#
 	#for c in placed:
 		#if c.uid == uid:
+			#if not is_instance_valid(c.node):
+				#_log("Highlight failed: Node is null", "error")
+				#return
 			#
 			#var node = c.node
-			## Create a temporary pulse animation
-			#var tween = create_tween()
-			#var original_color = Color(1, 1, 1, 1) # Default
+			#_log("Found component: " + c.id + " | Meshes found:", "info")
 			#
-			## Attempt to find meshes and pulse their emission
+			#var tween = create_tween()
+			#var mesh_count = 0
+			#
 			#for child in node.get_children():
 				#if child is MeshInstance3D:
+					#mesh_count += 1
 					#var mat = child.material_override
 					#if mat:
-						#original_color = mat.albedo_color
+						#_log("  → Animating mesh: " + child.name, "success")
 						#tween.tween_property(mat, "emission_enabled", true, 0)
 						#tween.tween_property(mat, "emission", Color(0, 0.8, 1), 0.2)
 						#tween.tween_property(mat, "emission_energy_multiplier", 10.0, 0.2)
-						#tween.parallel().tween_property(child, "scale", Vector3(1.1, 1.1, 1.1), 0.2)
+						#tween.tween_property(child, "scale", Vector3(1.1, 1.1, 1.1), 0.2)
 						#tween.tween_property(mat, "emission_energy_multiplier", 0.0, 0.4)
-						#tween.parallel().tween_property(child, "scale", Vector3(1.0, 1.0, 1.0), 0.4)
+						#tween.tween_property(child, "scale", Vector3(1.0, 1.0, 1.0), 0.4)
 						#tween.tween_property(mat, "emission_enabled", false, 0)
-						## Ensure scale is reset to 1 after animation (in case tween is interrupted)
-						#tween.finished.connect(func(): child.scale = Vector3(1, 1, 1))
+			#
+			#if mesh_count == 0:
+				#_log("No MeshInstance3D found at root level!", "warning")
+			#
+			#tween.finished.connect(func():
+				#if is_instance_valid(node):
+					#for ch in node.get_children():
+						#if ch is MeshInstance3D:
+							#ch.scale = Vector3.ONE
+			#)
+			#
 			#return
+	#
+	#_log("Highlight failed: UID not found in placed", "error")
+
 func _highlight_component(uid: int):
 	if uid == null or uid <= 0:
 		_log("Highlight failed: UID invalid", "error")
@@ -1706,24 +1823,20 @@ func _highlight_component(uid: int):
 					mesh_count += 1
 					var mat = child.material_override
 					if mat:
+						var original_scale = child.scale  # ← lưu scale gốc
 						_log("  → Animating mesh: " + child.name, "success")
 						tween.tween_property(mat, "emission_enabled", true, 0)
 						tween.tween_property(mat, "emission", Color(0, 0.8, 1), 0.2)
 						tween.tween_property(mat, "emission_energy_multiplier", 10.0, 0.2)
-						tween.tween_property(child, "scale", Vector3(1.1, 1.1, 1.1), 0.2)
+						tween.tween_property(child, "scale", original_scale * 1.1, 0.2)  # ← nhân với gốc
 						tween.tween_property(mat, "emission_energy_multiplier", 0.0, 0.4)
-						tween.tween_property(child, "scale", Vector3(1.0, 1.0, 1.0), 0.4)
+						tween.tween_property(child, "scale", original_scale, 0.4)  # ← về đúng gốc
 						tween.tween_property(mat, "emission_enabled", false, 0)
 			
 			if mesh_count == 0:
 				_log("No MeshInstance3D found at root level!", "warning")
 			
-			tween.finished.connect(func():
-				if is_instance_valid(node):
-					for ch in node.get_children():
-						if ch is MeshInstance3D:
-							ch.scale = Vector3.ONE
-			)
+			# Bỏ tween.finished vì tween đã tự reset về original_scale rồi
 			
 			return
 	
@@ -1735,27 +1848,6 @@ func _remove_selected():
 		var uid = item.get_metadata(0)
 		_remove_component(uid)
 
-func _remove_component(uid: int):
-	var found_idx = -1
-	for i in range(placed.size()):
-		if placed[i].uid == uid:
-			found_idx = i
-			break
-	
-	if found_idx != -1:
-		var comp = placed[found_idx]
-		if comp.type == "Frame":
-			_log("Cannot remove the main frame!", "error")
-			return
-			
-		_log("Removed: " + comp.id, "warning")
-		comp.node.queue_free()
-		placed.remove_at(found_idx)
-		
-		_rebuild_wires()
-		_update_all()
-	else:
-		_log("Nothing selected to delete", "info")
 
 func _update_diagnostics():
 	var issues := []
@@ -1822,3 +1914,656 @@ func _play_snap_sound():
 	# Tự xóa sau khi phát xong
 	await get_tree().create_timer(0.2).timeout
 	player.queue_free()
+
+
+# =================Wiring Mode======================
+var wiring_mode := false
+var wiring_drag_from: Dictionary = {}   # {uid, port_name, port_pos, port_type}
+var wiring_drag_active := false
+var wiring_drag_pos := Vector3.ZERO
+var manual_wires: Array[Dictionary] = []  # {from_uid, from_port, to_uid, to_port, node}
+var wire_drag_mesh: Node3D = null
+var wiring_hover_port: Dictionary = {}
+var wiring_tooltip: Label = null
+
+
+func _toggle_wiring_mode():
+	wiring_mode = !wiring_mode
+	
+	if wiring_mode:
+		_cancel_ghost()
+		_log("Wiring Mode ON — Click a port to start", "info")
+		_show_all_ports()
+		# Desaturate tất cả components
+		_set_components_desaturate(true)
+	else:
+		_hide_all_ports()
+		_set_components_desaturate(false)
+		_restore_all_materials()
+		_cancel_wire_drag()
+		_log("Wiring Mode OFF", "info")
+	if is_instance_valid(wiring_overlay):
+		wiring_overlay.visible = wiring_mode
+
+func _show_all_ports():
+	_clear_children(snap_hints)
+	for comp in placed:
+		if not is_instance_valid(comp.get("node")): continue
+		var ports = COMPONENTS[comp.id].get("ports", [])
+		for port in ports:
+			var hint = MeshInstance3D.new()
+			var sphere = SphereMesh.new()
+			sphere.radius = 0.18
+			sphere.height = 0.36
+			hint.mesh = sphere
+			hint.name = port.name
+			
+			# Màu theo loại port
+			var mat = StandardMaterial3D.new()
+			var port_color = _get_port_color(port)
+			mat.albedo_color = port_color
+			mat.emission_enabled = true
+			mat.emission = port_color
+			mat.emission_energy_multiplier = 2.0
+			mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+			hint.material_override = mat
+			hint.set_meta("parent_uid", comp.uid)
+			hint.set_meta("port_data", port)
+			hint.set_meta("port_type", _get_port_type(port))
+			snap_hints.add_child(hint)
+			hint.global_position = comp.node.global_transform * port.pos
+
+func _get_port_color(port: Dictionary) -> Color:
+	var allowed = port.get("allowed", [])
+	if allowed.has("Motor") or allowed.has("Battery"):
+		return Color(0.9, 0.1, 0.1, 0.85)   # Power = Đỏ
+	elif allowed.has("FC") or allowed.has("ESC"):
+		return Color(0.9, 0.75, 0.1, 0.85)  # Signal = Vàng
+	elif allowed.has("Propeller"):
+		return Color(0.1, 0.6, 0.9, 0.85)   # Prop = Xanh dương
+	return Color(0.5, 0.5, 0.5, 0.85)       # Default = Xám
+
+func _get_port_type(port: Dictionary) -> String:
+	var allowed = port.get("allowed", [])
+	if allowed.has("Motor") or allowed.has("Battery"): return "power"
+	if allowed.has("FC") or allowed.has("ESC"): return "signal"
+	if allowed.has("Propeller"): return "prop"
+	return "generic"
+
+func _hide_all_ports():
+	_clear_children(snap_hints)
+
+func _set_components_desaturate(on: bool):
+	for comp in placed:
+		if not is_instance_valid(comp.get("node")): continue
+		_apply_desaturate_recursive(comp.node, on)
+
+
+func _apply_desaturate_recursive(node: Node, on: bool):
+	for ch in node.get_children():
+		if ch is MeshInstance3D and on:
+			# Duplicate riêng để tránh shared material bug
+			var mat = ch.material_override
+			if mat == null and ch.mesh and ch.mesh.surface_get_material(0):
+				mat = ch.mesh.surface_get_material(0)
+			if mat != null:
+				mat = mat.duplicate()
+				mat.resource_local_to_scene = true
+				ch.material_override = mat
+				if mat is StandardMaterial3D:
+					if not ch.has_meta("original_albedo"):
+						ch.set_meta("original_albedo", mat.albedo_color)
+						ch.set_meta("original_transparency", mat.transparency)
+					var gray = mat.albedo_color.lerp(Color(0.5, 0.5, 0.5), 0.6)
+					gray.a = 0.5
+					mat.albedo_color = gray
+					mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+		_apply_desaturate_recursive(ch, on)
+
+func _cancel_wire_drag():
+	wiring_drag_active = false
+	wiring_drag_from = {}
+	if is_instance_valid(wire_drag_mesh):
+		wire_drag_mesh.queue_free()
+		wire_drag_mesh = null
+		
+var wiring_overlay: Panel = null
+
+func _setup_wiring_tab():
+	# Không tạo tab mới — thay vào đó tạo overlay trên Canvas
+	var canvas_panel = tabs.get_child(0)  # Canvas tab
+	
+	wiring_overlay = Panel.new()
+	wiring_overlay.name = "WiringOverlay"
+	wiring_overlay.visible = false
+	wiring_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wiring_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	# Style overlay
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Color(0, 0, 0, 0)  # Transparent
+	sb.border_color = Color(0.1, 0.8, 0.9, 0.8)
+	sb.border_width_top = 2
+	wiring_overlay.add_theme_stylebox_override("panel", sb)
+	
+	# Label hướng dẫn ở góc trên
+	var hint_label = Label.new()
+	hint_label.name = "HintLabel"
+	hint_label.text = "⚡ WIRING MODE  |  Click Wiring tab cancel"
+	hint_label.add_theme_font_size_override("font_size", 12)
+	hint_label.add_theme_color_override("font_color", Color(0.1, 0.9, 0.9))
+	hint_label.position = Vector2(10, 8)
+	wiring_overlay.add_child(hint_label)
+	
+	canvas_panel.add_child(wiring_overlay)
+	
+	# Thêm tab Wiring thật sự — khi click sẽ switch về Canvas + bật mode
+	var wiring_tab_dummy = Control.new()
+	wiring_tab_dummy.name = "Wiring"
+	tabs.add_child(wiring_tab_dummy)
+	
+	tabs.tab_changed.connect(_on_tab_changed)
+
+
+var ignore_next_tab_change := false
+func _on_tab_changed(tab_idx: int):
+
+	if ignore_next_tab_change:
+		ignore_next_tab_change = false
+		return
+
+	var tab_name = tabs.get_tab_title(tab_idx)
+
+	# ====================== WIRING TAB ======================
+	if tab_name == "Wiring":
+
+		ignore_next_tab_change = true
+		tabs.current_tab = 0
+
+		wiring_mode = !wiring_mode
+
+		if wiring_mode:
+			_cancel_ghost()
+			_show_all_ports()
+			_set_components_desaturate(true)
+
+			if is_instance_valid(wiring_overlay):
+				wiring_overlay.visible = true
+
+			_log("Wiring Mode ON — Click a port to connect", "info")
+
+		else:
+			_hide_all_ports()
+			_set_components_desaturate(false)
+			_restore_all_materials()
+			_cancel_wire_drag()
+
+			if is_instance_valid(wiring_overlay):
+				wiring_overlay.visible = false
+
+			_log("Wiring Mode OFF", "info")
+
+		return
+
+
+	# ====================== OTHER TABS ======================
+	if wiring_mode:
+		wiring_mode = false
+
+		_hide_all_ports()
+		_set_components_desaturate(false)
+		_restore_all_materials()
+		_cancel_wire_drag()
+
+		if is_instance_valid(wiring_overlay):
+			wiring_overlay.visible = false
+
+		_log("Wiring Mode OFF", "info")
+
+func _raycast_port() -> Dictionary:
+	var mpos = viewport.get_mouse_position()
+	var ro = camera.project_ray_origin(mpos)
+	var rd = camera.project_ray_normal(mpos)
+	var best_d := 0.4
+	var best = {}
+	for hint in snap_hints.get_children():
+		if not is_instance_valid(hint): continue
+		var to_hint = hint.global_position - ro
+		var proj = to_hint.dot(rd)
+		if proj <= 0: continue
+		var closest = ro + rd * proj
+		var dist = closest.distance_to(hint.global_position)
+		if dist < best_d:
+			best_d = dist
+			best = {
+				"uid": hint.get_meta("parent_uid", -1),
+				"port_name": hint.name,
+				"port_pos": hint.global_position,
+				"port_type": hint.get_meta("port_type", "generic"),
+				"port_data": hint.get_meta("port_data", {}),
+				"hint_node": hint
+			}
+	return best
+
+func _try_connect_wire(to_port: Dictionary):
+	# Validation
+	var from_type = wiring_drag_from.get("port_type", "")
+	var to_type = to_port.get("port_type", "")
+	
+	if wiring_drag_from.get("uid", -1) == to_port.get("uid", -1): 
+		_show_wire_error("Cannot connect to same component!")
+		_cancel_wire_drag()
+		return
+	
+	if from_type != to_type:
+		_show_wire_error("Incompatible ports! (" + from_type + " ≠ " + to_type + ")")
+		_flash_wire_red()
+		await get_tree().create_timer(0.5).timeout
+		_cancel_wire_drag()
+		return
+	
+	# Valid — tạo wire thực sự
+	_finalize_wire(wiring_drag_from, to_port)
+	_cancel_wire_drag()
+	_log("Wire connected: " + wiring_drag_from.port_name + " → " + to_port.port_name, "success")
+
+
+func _finalize_wire(from: Dictionary, to: Dictionary):
+	var wire_node = Node3D.new()
+	_draw_bezier_wire(wire_node, from.port_pos, to.port_pos, Color(0.1, 0.8, 0.3))
+	
+	if drone_root:
+		drone_root.add_child(wire_node)
+	else:
+		components_group.add_child(wire_node)  
+	manual_wires.append({
+		"from_uid": from.uid,
+		"from_port": from.port_name,
+		"to_uid": to.uid,
+		"to_port": to.port_name,
+		"node": wire_node
+	})  
+	# Pulse animation
+	_animate_wire_pulse(wire_node)
+
+
+
+func _show_wire_error(msg: String):
+	_log("WIRE ERROR: " + msg, "error")
+	# Tooltip nổi
+	if is_instance_valid(wiring_tooltip):
+		wiring_tooltip.queue_free()
+	wiring_tooltip = Label.new()
+	wiring_tooltip.text = "⚠ " + msg
+	wiring_tooltip.add_theme_font_size_override("font_size", 13)
+	wiring_tooltip.add_theme_color_override("font_color", Color(1, 0.3, 0.3))
+	add_child(wiring_tooltip)
+	wiring_tooltip.global_position = get_global_mouse_position() + Vector2(10, -30)
+	await get_tree().create_timer(1.5).timeout
+	if is_instance_valid(wiring_tooltip):
+		wiring_tooltip.queue_free()
+
+func _flash_wire_red():
+	if not is_instance_valid(wire_drag_mesh): return
+	for ch in wire_drag_mesh.get_children():
+		if ch is MeshInstance3D and ch.material_override:
+			ch.material_override.albedo_color = Color(1, 0.1, 0.1)
+
+func _draw_bezier_wire(root: Node3D, from: Vector3, to: Vector3, color: Color):
+	var dist = from.distance_to(to)
+	var segments = 10
+	var sag = max(0.15, dist * 0.2)
+	var mid = (from + to) / 2.0
+	mid.y -= sag
+	for i in range(segments):
+		var t0 = float(i) / segments
+		var t1 = float(i + 1) / segments
+		var p0 = _bezier3(from, mid, to, t0)
+		var p1 = _bezier3(from, mid, to, t1)
+		var seg_dist = p0.distance_to(p1)
+		var cyl = MeshInstance3D.new()
+		var cm = CylinderMesh.new()
+		cm.top_radius = 0.035
+		cm.bottom_radius = 0.035
+		cm.height = seg_dist
+		cyl.mesh = cm
+		var mat = StandardMaterial3D.new()
+		mat.albedo_color = color
+		mat.emission_enabled = true
+		mat.emission = color
+		mat.emission_energy_multiplier = 1.5
+		cyl.material_override = mat
+		root.add_child(cyl)
+		cyl.look_at_from_position((p0 + p1) / 2.0, p1, Vector3.UP)
+		cyl.rotate_object_local(Vector3.RIGHT, PI / 2)
+
+func _animate_wire_pulse(wire_node: Node3D):
+	# Tween emission để tạo hiệu ứng pulse
+	var tween = create_tween().set_loops()
+	for ch in wire_node.get_children():
+		if ch is MeshInstance3D and ch.material_override:
+			tween.tween_property(ch.material_override, 
+				"emission_energy_multiplier", 3.0, 0.5)
+			tween.tween_property(ch.material_override, 
+				"emission_energy_multiplier", 1.0, 0.5)
+func _create_drag_wire() -> Node3D:
+	var w = Node3D.new()
+	w.name = "DragWire"
+	scene_root.add_child(w)
+	return w
+
+func _restore_all_materials():
+	for comp in placed:
+		if not is_instance_valid(comp.get("node")): continue
+		_restore_materials_recursive(comp.node)
+
+
+func _restore_materials_recursive(node: Node):
+	for ch in node.get_children():
+		if ch is MeshInstance3D and ch.has_meta("original_albedo"):
+			var mat = ch.material_override
+			if mat is StandardMaterial3D:
+				mat.albedo_color = ch.get_meta("original_albedo")
+				mat.transparency = ch.get_meta("original_transparency")
+				mat.albedo_color.a = 1.0
+				mat.emission_enabled = false
+				ch.remove_meta("original_albedo")
+				ch.remove_meta("original_transparency")
+		_restore_materials_recursive(ch)
+
+var tree_items: Dictionary = {}   # uid -> TreeItem
+
+# =================Xây dựng lại toàn bộ Hierarchy Tree====================
+func _build_hierarchy_tree():
+	if not is_instance_valid(hier_tree):
+		return
+	
+	hier_tree.clear()
+	tree_items.clear()
+	
+	var root = hier_tree.create_item()
+	root.set_text(0, "Drone")
+	
+	# 1. Tạo các component cha (root level)
+	for comp in placed:
+		if comp.get("parent_id", -1) <= 0:
+			_create_hier_item(comp, root)
+	
+	# 2. Tạo các component con
+	for comp in placed:
+		if comp.get("parent_id", -1) > 0:
+			var parent_item = tree_items.get(comp.get("parent_id"), root)
+			_create_hier_item(comp, parent_item)
+	
+
+
+
+# Tạo một item trong Tree
+func _create_hier_item(comp: Dictionary, parent_item: TreeItem) -> TreeItem:
+	var item = hier_tree.create_item(parent_item)
+	
+	# Icon theo loại component
+	var prefix = ""
+	match comp.type:
+		"Frame":    prefix = "🔲 "
+		"Motor":    prefix = "⚙️ "
+		"Propeller": prefix = "🌀 "
+		"Battery":  prefix = "🔋 "
+		"FC":       prefix = "💻 "
+		"ESC":      prefix = "⚡ "
+		_:          prefix = "📦 "
+	
+	item.set_text(0, prefix + comp.id)
+	item.set_metadata(0, comp.uid)
+	
+	# Màu theo loại
+	match comp.type:
+		"Frame":    item.set_custom_color(0, Color(0.8, 0.8, 0.8))
+		"Motor":    item.set_custom_color(0, Color(0.9, 0.5, 0.5))
+		"Propeller": item.set_custom_color(0, Color(0.5, 0.7, 1.0))
+		"Battery":  item.set_custom_color(0, Color(0.9, 0.8, 0.2))
+		"FC":       item.set_custom_color(0, Color(0.3, 0.9, 0.5))
+		"ESC":      item.set_custom_color(0, Color(0.5, 0.6, 1.0))
+	
+	# Tự động expand parent để thấy con
+	if parent_item:
+		parent_item.set_collapsed(false)
+	
+	tree_items[comp.uid] = item
+	return item
+
+#============COMPONENT LIST===============
+var _cat_collapsed: Dictionary = {}  # track trạng thái collapsed của từng category
+
+func _build_comp_list():
+	comp_list.clear()
+	for cat in CATEGORIES:
+		# Lấy trạng thái collapsed, mặc định là false (expanded)
+		var collapsed = _cat_collapsed.get(cat, false)
+		var arrow = "▾ " if not collapsed else "▸ "
+		
+		var ci = comp_list.add_item(arrow + cat)
+		comp_list.set_item_selectable(ci, true)
+		comp_list.set_item_metadata(ci, {"is_category": true, "cat": cat})
+		comp_list.set_item_custom_fg_color(ci, Color(0.75, 0.75, 0.75))
+		
+		# Chỉ hiện items nếu category chưa bị collapse
+		if not collapsed:
+			for cid in CATEGORIES[cat]:
+				if COMPONENTS.has(cid):
+					var ii = comp_list.add_item("   " + cid)
+					comp_list.set_item_metadata(ii, {"is_category": false, "id": cid})
+					var c = COMPONENTS[cid]
+					match c.type:
+						"Motor":    comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.4, 0.4))
+						"Battery":  comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.8, 0.2))
+						"Frame":    comp_list.set_item_custom_fg_color(ii, Color(0.7, 0.7, 0.7))
+						_:          comp_list.set_item_custom_fg_color(ii, Color(0.6, 0.7, 0.8))
+
+
+func _pick_existing():
+	var mpos = viewport.get_mouse_position()
+	var ro = camera.project_ray_origin(mpos)
+	var rd = camera.project_ray_normal(mpos)
+	
+	var best_uid := -1
+	var best_d := 1000.0
+	
+	for c in placed:
+		if not is_instance_valid(c.node): continue
+		if c.type == "Frame": continue
+		var to_node = c.node.global_position - ro
+		var projection = to_node.dot(rd)
+		if projection > 0:
+			var closest_point = ro + rd * projection
+			var dist = closest_point.distance_to(c.node.global_position)
+			if dist < 1.0 and dist < best_d:
+				best_d = dist
+				best_uid = c.uid
+	
+	if best_uid == -1:
+		return
+	
+	# Tìm motor entry
+	var motor_entry = null
+	var motor_idx = -1
+	for i in range(placed.size()):
+		if placed[i].uid == best_uid:
+			motor_entry = placed[i]
+			motor_idx = i
+			break
+	
+	if motor_entry == null:
+		return
+	
+	cur_id = motor_entry.id
+	_ghost_children.clear()
+	
+	# Thu thập children + offset (dùng local position để không phụ thuộc world transform)
+	var children_indices: Array[int] = []
+	for j in range(placed.size()):
+		var candidate = placed[j]
+		if candidate.get("parent_id", -1) != best_uid:
+			continue
+		var local_offset = Vector3.ZERO
+		if is_instance_valid(candidate.get("node")) and is_instance_valid(motor_entry.node):
+			local_offset = motor_entry.node.global_transform.affine_inverse() * candidate.node.global_position
+		_ghost_children.append({
+			"id": candidate.id,
+			"local_offset": local_offset,
+			"port_name": candidate.get("port_name", ""),
+		})
+		children_indices.append(j)
+	
+	# Xóa children khỏi placed (không free node — sẽ bị free theo motor)
+	children_indices.sort()
+	children_indices.reverse()
+	for idx in children_indices:
+		placed.remove_at(idx)
+	
+	# Xóa motor khỏi placed
+	# Phải điều chỉnh motor_idx vì đã remove children ở trên
+	# Tìm lại motor_idx sau khi xóa children
+	motor_idx = -1
+	for i in range(placed.size()):
+		if placed[i].uid == best_uid:
+			motor_idx = i
+			break
+	if motor_idx != -1:
+		placed.remove_at(motor_idx)
+	
+	# Tạo ghost mới
+	ghost = _build_mesh(cur_id, true)
+	components_group.add_child(ghost)
+	
+	# Free node motor (children node là con của motor node nên bị free theo — đúng)
+	if is_instance_valid(motor_entry.node):
+		motor_entry.node.queue_free()
+	
+	_show_snap_hints(cur_id)
+	
+	# Tạo ghost visual cho children
+	for child_info in _ghost_children:
+		var child_ghost = _build_mesh(child_info.id, true)
+		ghost.add_child(child_ghost)
+		child_ghost.position = child_info.local_offset
+	
+	_rebuild_wires()
+	_update_all()
+	
+
+
+func _remove_component(uid: int):
+	var found_idx = -1
+	for i in range(placed.size()):
+		if placed[i].uid == uid:
+			found_idx = i
+			break
+	
+	if found_idx == -1:
+		_log("Nothing selected to delete", "info")
+		return
+	
+	var comp = placed[found_idx]
+	if comp.type == "Frame":
+		_log("Cannot remove the main frame!", "error")
+		return
+	
+	# Detach children khỏi node cha trước khi free
+	for other in placed:
+		if other.get("parent_id", -1) != uid: continue
+		if not is_instance_valid(other.get("node")): continue
+		var world_pos = other.node.global_position
+		if other.node.get_parent():
+			other.node.get_parent().remove_child(other.node)
+		components_group.add_child(other.node)
+		other.node.global_position = world_pos
+		other["parent_id"] = -1
+		other["port_name"] = ""
+	
+	if is_instance_valid(comp.get("node")):
+		comp.node.queue_free()
+	placed.remove_at(found_idx)
+	
+	_rebuild_wires()
+	_update_all()
+
+
+func _re_place_ghost_children(parent_uid_hint: int):
+
+	
+	if _ghost_children.is_empty():
+		
+		return
+	# Tìm motor vừa place
+	var parent_entry = null
+	var latest_uid = -1
+	for entry in placed:
+		if entry.id == cur_id and entry.uid > latest_uid:
+			latest_uid = entry.uid
+			parent_entry = entry
+	
+	if parent_entry == null:
+		_log("FAILED: parent_entry is null, cur_id=" + cur_id, "error")
+		_ghost_children.clear()
+		return
+	
+	if not is_instance_valid(parent_entry.get("node")):
+		_log("FAILED: parent node invalid", "error")
+		_ghost_children.clear()
+		return
+		
+	
+	for child_info in _ghost_children:
+		
+		var child_type = COMPONENTS[child_info.id].type
+		var ports = COMPONENTS[parent_entry.id].get("ports", [])
+		
+		var target_port = ""
+		var target_pos = parent_entry.node.global_position
+		
+		for port in ports:
+			if not port.get("allowed", []).has(child_type):
+				continue
+			var occupied = false
+			for other in placed:
+				if other.get("port_name", "") == port.name and other.get("parent_id", -1) == parent_entry.uid:
+					occupied = true
+					break
+			if not occupied:
+				target_port = port.name
+				target_pos = parent_entry.node.global_transform * port.pos
+				break
+		
+		_place(child_info.id, target_pos, target_port, parent_entry.uid)
+
+	
+	_ghost_children.clear()
+	
+#=============CAMERA ON DRONE ====================
+func _focus_camera_on_drone():
+	var min_pos = Vector3(INF, INF, INF)
+	var max_pos = Vector3(-INF, -INF, -INF)
+	
+	for c in placed:
+		if not is_instance_valid(c.get("node")): continue
+		var pos = c.node.global_position
+		min_pos.x = min(min_pos.x, pos.x)
+		min_pos.y = min(min_pos.y, pos.y)
+		min_pos.z = min(min_pos.z, pos.z)
+		max_pos.x = max(max_pos.x, pos.x)
+		max_pos.y = max(max_pos.y, pos.y)
+		max_pos.z = max(max_pos.z, pos.z)
+	
+	var center = (min_pos + max_pos) / 2.0
+	var size = (max_pos - min_pos).length()
+	
+	# Pivot đúng tại center của drone, không offset
+	pivot.global_position = center + Vector3(0, 2, -2)
+	
+	zoom = max(size * 1, 7.0)
+	
+	# Nhìn thẳng mặt drone, góc cao hơn để drone ở giữa
+	# X = -0.2 : nhìn hơi từ trên xuống (thấp, gần ngang)
+	# Y = 0.3  : xoay nhẹ sang phải
+	camera_rot = Vector2(-0.6, 0.0) 
