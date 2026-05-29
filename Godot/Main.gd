@@ -45,6 +45,7 @@ extends Control
 @onready var stop_btn: Button  = $Root/Content/CenterRight/Right/Scroll/V/SimPanel/StopBtn
 @onready var sim_label: Label  = $Root/Content/CenterRight/Right/Scroll/V/SimPanel/StatusLbl
 @onready var topbar_status: Label = $Root/TopBar/H/Status
+@onready var cat_sidebar: VBoxContainer = $Root/Content/CenterRight/Center/Tabs/Blocks/MainH/Sidebar/V
 
 # Scale factors for components
 const OBJ_SCALE := 0.01 # convert mm to Godot units
@@ -62,19 +63,27 @@ var CATEGORIES := {
 	"ELECTRONICS": ["F4 Flight Controller", "4-in-1 ESC"],
 }
 #======= Block category
+# Thay thế BLOCK_CATEGORIES cũ
 var BLOCK_CATEGORIES := {
-	"Events": [
-		{"type": "start", "label": "When ⚐ clicked", "color": Color(0.85, 0.65, 0)},
-	],
-	"Flight": [
-		{"type": "take_off", "label": "Take Off",        "color": Color(0.3, 0.6, 1.0)},
-		{"type": "land",     "label": "Land drone",      "color": Color(0.9, 0.5, 0.1)},
-	],
-	"Motion": [
-		{"type": "forward",  "label": "Forward [ 50 ] cm", "color": Color(0.25, 0.55, 0.95)},
-		{"type": "hover",    "label": "Hover (2s)",         "color": Color(0.2, 0.5, 0.9)},
-	],
+	"BtnE":      {"label": "Events",    "color": Color(0.85, 0.65, 0.0),
+		"blocks": [
+			{"type": "start",   "label": "When ⚐ clicked", "color": Color(0.85, 0.65, 0)},
+		]},
+	"BtnM":      {"label": "Motion",    "color": Color(0.25, 0.45, 0.85),
+		"blocks": [
+			{"type": "forward", "label": "Forward [ 50 ] cm", "color": Color(0.25, 0.55, 0.95)},
+			{"type": "hover",   "label": "Hover (2s)",         "color": Color(0.2,  0.5,  0.9)},
+		]},
+	"BtnC":      {"label": "Flight",    "color": Color(0.2, 0.6, 0.35),
+		"blocks": [
+			{"type": "take_off","label": "Take Off",   "color": Color(0.3, 0.6, 1.0)},
+			{"type": "land",    "label": "Land drone", "color": Color(0.9, 0.5, 0.1)},
+		]},
+	"Variables": {"label": "Variables", "color": Color(0.8, 0.3, 0.25),
+		"blocks": []},
 }
+
+var _active_block_cat := "BtnE"
 
 var _block_cat_collapsed  := {}  # { "Events": false, "Flight": true, ... }
 var COMPONENTS := {
@@ -258,24 +267,151 @@ func _on_bridge_disconnected():
 #
 		#_create_block(type, label, color, get_global_mouse_position() - workspace.global_position + Vector2(10, 0))
 
+#func _setup_blocks():
+	## Khởi tạo trạng thái collapse (mặc định: tất cả mở)
+	#for cat in BLOCK_CATEGORIES:
+		#if not _cat_collapsed.has(cat):
+			#_block_cat_collapsed [cat] = false
+		#_build_toolbox()
+#
+#func _on_toolbox_input(event, node):
+	#if event is InputEventMouseButton \
+	#and event.button_index == MOUSE_BUTTON_LEFT \
+	#and event.pressed:
+		#if not node.has_meta("block_type"):
+			#return
+		#var type:  String = node.get_meta("block_type")
+		#var label: String = node.get_meta("block_label")
+		#var color: Color  = node.get_meta("block_color")
+		#_create_block(type, label, color,
+			#get_global_mouse_position() - workspace.global_position + Vector2(10, 0))
+
 func _setup_blocks():
-	# Khởi tạo trạng thái collapse (mặc định: tất cả mở)
-	for cat in BLOCK_CATEGORIES:
-		if not _cat_collapsed.has(cat):
-			_block_cat_collapsed [cat] = false
-		_build_toolbox()
+	_active_block_cat = "BtnE"
+	
+	# Wire up từng button đã có sẵn trong scene
+	for node_name in BLOCK_CATEGORIES:
+		var btn = cat_sidebar.get_node_or_null(node_name)
+		if not is_instance_valid(btn):
+			continue
+		var cat_key = node_name  # capture
+		btn.pressed.connect(func():
+			_active_block_cat = cat_key
+			_refresh_cat_styles()
+			_build_block_list()
+			)
+	
+	_refresh_cat_styles()
+	_build_block_list()
+
+func _refresh_cat_styles():
+	for node_name in BLOCK_CATEGORIES:
+		var btn = cat_sidebar.get_node_or_null(node_name)
+		if not is_instance_valid(btn): continue
+		
+		var is_active = (node_name == _active_block_cat)
+		var cat_color: Color = BLOCK_CATEGORIES[node_name]["color"]
+		
+		var sb = StyleBoxFlat.new()
+		sb.bg_color = cat_color if is_active else Color(0.15, 0.15, 0.18)
+		sb.corner_radius_top_left    = 6
+		sb.corner_radius_top_right   = 6
+		sb.corner_radius_bottom_left = 6
+		sb.corner_radius_bottom_right = 6
+		btn.add_theme_stylebox_override("normal",  sb)
+		btn.add_theme_stylebox_override("hover",   sb)
+		btn.add_theme_stylebox_override("pressed", sb)
+		
+		var font_color = Color.WHITE if is_active else Color(0.5, 0.5, 0.55)
+		btn.add_theme_color_override("font_color", font_color)
 
 func _on_toolbox_input(event, node):
 	if event is InputEventMouseButton \
 	and event.button_index == MOUSE_BUTTON_LEFT \
 	and event.pressed:
-		if not node.has_meta("block_type"):
-			return
-		var type:  String = node.get_meta("block_type")
-		var label: String = node.get_meta("block_label")
-		var color: Color  = node.get_meta("block_color")
-		_create_block(type, label, color,
-			get_global_mouse_position() - workspace.global_position + Vector2(10, 0))
+		if not node.has_meta("block_type"): return
+	_create_block(
+			node.get_meta("block_type"),
+			node.get_meta("block_label"),
+			node.get_meta("block_color"),
+			get_global_mouse_position() - workspace.global_position + Vector2(10, 0)
+)
+
+#func _build_block_list():
+	## Xóa blocks cũ, giữ trash zone
+	#for child in toolbox_v.get_children():
+		#if is_instance_valid(child) and child.name != "TrashZone":
+			#child.queue_free()
+	#
+	#var entries = BLOCK_CATEGORIES.get(_active_block_cat, {}).get("blocks", [])
+	#
+	#if entries.is_empty():
+		#var lbl = Label.new()
+		#lbl.text = "No blocks yet"
+		#lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.45))
+		#lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		#toolbox_v.add_child(lbl)
+		#return
+	#for entry in entries:
+		#var btn = Button.new()
+		#btn.text    = entry["label"]
+		#btn.custom_minimum_size = Vector2(0, 40)
+		#btn.size_flags_horizontal = Control.SIZE_FILL
+		#
+		#var bsb = StyleBoxFlat.new()
+		#bsb.bg_color = entry["color"]
+		#bsb.corner_radius_top_left    = 8
+		#bsb.corner_radius_top_right   = 8
+		#bsb.corner_radius_bottom_left = 8
+		#bsb.corner_radius_bottom_right = 8
+		#btn.add_theme_stylebox_override("normal", bsb)
+		#btn.add_theme_font_size_override("font_size", 11)
+		#
+		#btn.set_meta("block_type",  entry["type"])
+		#btn.set_meta("block_label", entry["label"])
+		#btn.set_meta("block_color", entry["color"])
+		#btn.gui_input.connect(_on_toolbox_input.bind(btn))
+		#toolbox_v.add_child(btn)
+func _build_block_list():
+	for child in toolbox_v.get_children():
+		if is_instance_valid(child) and child.name != "TrashZone":
+			child.queue_free()
+	
+	var entries = BLOCK_CATEGORIES.get(_active_block_cat, {}).get("blocks", [])
+	
+	if entries.is_empty():
+		var lbl = Label.new()
+		lbl.text = "No blocks yet"
+		lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.45))
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		toolbox_v.add_child(lbl)
+		return
+	for entry in entries:
+		var btn = Button.new()
+		btn.text = entry["label"]
+		btn.custom_minimum_size = Vector2(0, 40)
+		btn.size_flags_horizontal = Control.SIZE_FILL
+		
+		var bsb = StyleBoxFlat.new()
+		bsb.bg_color = entry["color"]
+		bsb.corner_radius_top_left    = 8
+		bsb.corner_radius_top_right   = 8
+		bsb.corner_radius_bottom_left = 8
+		bsb.corner_radius_bottom_right = 8
+		btn.add_theme_stylebox_override("normal", bsb)
+		btn.add_theme_font_size_override("font_size", 11)
+		
+		# ✅ Dùng pressed thay vì gui_input
+		var e = entry  # capture
+		btn.pressed.connect(func():
+			_create_block(
+				e["type"],
+				e["label"],
+				e["color"],
+				get_global_mouse_position() - workspace.global_position + Vector2(10, 0)
+			)
+		)
+		toolbox_v.add_child(btn)
 
 func _build_toolbox():
 	# Xóa hết children cũ
@@ -509,11 +645,89 @@ func _create_trash_zone():
 
 
 var snap_preview: Panel = null
+#func _check_snapping(moving_block: Panel):
+	#if not is_instance_valid(moving_block): return
+	#if trash_panel: trash_panel.visible = false
+	#
+	## Xóa preview cũ
+	#if is_instance_valid(snap_preview):
+		#snap_preview.queue_free()
+		#snap_preview = null
+#
+	#var mpos = get_global_mouse_position()
+	#
+	## 1. DELETE
+	#if is_instance_valid(toolbox) and toolbox.get_global_rect().has_point(mpos):
+		#moving_block.queue_free()
+		#_log("Block deleted", "warning")
+		#return
+#
+	## 2. Preparation
+	#var old_pos = moving_block.global_position
+	#if moving_block.get_parent() != workspace:
+		#moving_block.get_parent().remove_child(moving_block)
+		#workspace.add_child(moving_block)
+		#moving_block.global_position = old_pos
+#
+	## 3. TÌM BEST PARENT ĐỂ SNAP
+	#var best_parent = null
+	#var min_dist = 40.0
+	#var best_snap_pos = Vector2.ZERO
+	#
+	#var all_blocks = _get_all_blocks(workspace)
+	#for other in all_blocks:
+		#if not is_instance_valid(other): continue
+		#if other == moving_block: continue
+		#if other.is_ancestor_of(moving_block): continue
+		#
+		#var other_bottom_global = other.global_position + Vector2(0, other.size.y)
+		#var d = moving_block.global_position.distance_to(other_bottom_global)
+		#var dx = abs(moving_block.global_position.x - other.global_position.x)
+		#
+		#if d < min_dist and dx < 50:
+			#min_dist = d
+			#best_parent = other
+			#best_snap_pos = other_bottom_global
+#
+	## === GHOST PREVIEW (chỉ thêm phần này) ===
+	#if best_parent:
+		#snap_preview = Panel.new()
+		#snap_preview.custom_minimum_size = moving_block.custom_minimum_size
+		#snap_preview.modulate = Color(1, 1, 1, 0.3)   # Độ trong của ghost
+		#snap_preview.position = best_snap_pos
+		#workspace.add_child(snap_preview)
+		#
+		#var style = moving_block.get_theme_stylebox("panel").duplicate()
+		#if style is StyleBoxFlat:
+			#style.shadow_size = 0
+			#style.bg_color.a = 0.25
+		#snap_preview.add_theme_stylebox_override("panel", style)
+#
+#
+	#if best_parent and is_instance_valid(best_parent):
+		## Target = ngay bên dưới best_parent, cùng X
+		#print("best_parent.position: ", best_parent.position)
+		#print("best_parent.custom_minimum_size: ", best_parent.custom_minimum_size)
+		#print("moving_block.custom_minimum_size: ", moving_block.custom_minimum_size)
+		#var target_pos = best_parent.position + Vector2(0, best_parent.custom_minimum_size.y)
+		#print("target_pos: ", target_pos)
+		#
+		#moving_block.z_index = best_parent.z_index + 1
+		#moving_block.position = target_pos + Vector2(0, -20)
+		#
+		#var tween = create_tween()
+		#tween.set_ease(Tween.EASE_OUT)
+		#tween.set_trans(Tween.TRANS_ELASTIC)
+		#tween.tween_property(moving_block, "position", target_pos, 0.4)
+		#
+		#_play_snap_sound()
+		#_log("Snapped to stack", "success")
+#
+
 func _check_snapping(moving_block: Panel):
 	if not is_instance_valid(moving_block): return
 	if trash_panel: trash_panel.visible = false
 	
-	# Xóa preview cũ
 	if is_instance_valid(snap_preview):
 		snap_preview.queue_free()
 		snap_preview = null
@@ -533,62 +747,67 @@ func _check_snapping(moving_block: Panel):
 		workspace.add_child(moving_block)
 		moving_block.global_position = old_pos
 
-	# 3. TÌM BEST PARENT ĐỂ SNAP
+	# 3. Tìm best parent để snap
 	var best_parent = null
 	var min_dist = 40.0
 	var best_snap_pos = Vector2.ZERO
-	
+
 	var all_blocks = _get_all_blocks(workspace)
 	for other in all_blocks:
 		if not is_instance_valid(other): continue
 		if other == moving_block: continue
 		if other.is_ancestor_of(moving_block): continue
-		
-		var other_bottom_global = other.global_position + Vector2(0, other.size.y)
-		var d = moving_block.global_position.distance_to(other_bottom_global)
-		var dx = abs(moving_block.global_position.x - other.global_position.x)
-		
-		if d < min_dist and dx < 50:
-			min_dist = d
-			best_parent = other
-			best_snap_pos = other_bottom_global
 
-	# === GHOST PREVIEW (chỉ thêm phần này) ===
+		var other_bottom = other.position + Vector2(0, other.custom_minimum_size.y)
+		var d = moving_block.position.distance_to(other_bottom)
+		var dx = abs(moving_block.position.x - other.position.x)
+
+		if d >= min_dist or dx >= 50:
+			continue
+
+		# ✅ Check slot occupied — dùng .position (local) nhất quán
+		var slot_occupied = false
+		for another in all_blocks:
+			if not is_instance_valid(another): continue
+			if another == moving_block: continue
+			if another == other: continue
+			var dy_check = abs(another.position.y - other_bottom.y)
+			var dx_check = abs(another.position.x - other.position.x)
+			if dy_check < 15.0 and dx_check < 30.0:
+				slot_occupied = true
+				break  # ← break khỏi for another
+
+		if slot_occupied:
+			continue  # ← ✅ continue for other, bỏ qua slot này
+
+		min_dist = d
+		best_parent = other
+		best_snap_pos = other_bottom
+
+	# Ghost preview
 	if best_parent:
 		snap_preview = Panel.new()
 		snap_preview.custom_minimum_size = moving_block.custom_minimum_size
-		snap_preview.modulate = Color(1, 1, 1, 0.3)   # Độ trong của ghost
+		snap_preview.modulate = Color(1, 1, 1, 0.3)
 		snap_preview.position = best_snap_pos
 		workspace.add_child(snap_preview)
-		
 		var style = moving_block.get_theme_stylebox("panel").duplicate()
 		if style is StyleBoxFlat:
 			style.shadow_size = 0
 			style.bg_color.a = 0.25
 		snap_preview.add_theme_stylebox_override("panel", style)
 
-
 	if best_parent and is_instance_valid(best_parent):
-		# Target = ngay bên dưới best_parent, cùng X
-		print("best_parent.position: ", best_parent.position)
-		print("best_parent.custom_minimum_size: ", best_parent.custom_minimum_size)
-		print("moving_block.custom_minimum_size: ", moving_block.custom_minimum_size)
 		var target_pos = best_parent.position + Vector2(0, best_parent.custom_minimum_size.y)
-		print("target_pos: ", target_pos)
-		
 		moving_block.z_index = best_parent.z_index + 1
 		moving_block.position = target_pos + Vector2(0, -20)
-		
+
 		var tween = create_tween()
 		tween.set_ease(Tween.EASE_OUT)
 		tween.set_trans(Tween.TRANS_ELASTIC)
 		tween.tween_property(moving_block, "position", target_pos, 0.4)
-		
 		_play_snap_sound()
 		_log("Snapped to stack", "success")
-
-
-
 
 # Helper to find all blocks regardless of nesting
 func _get_all_blocks(parent_node) -> Array:

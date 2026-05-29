@@ -111,3 +111,11 @@ func _on_help_button_pressed() -> void:
 	show_tutorial()
 
 	show_step() 
+
+
+func _on_m_8_pressed() -> void:
+	current_step = 0
+
+	show_tutorial()
+
+	show_step() 
