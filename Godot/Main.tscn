@@ -820,6 +820,7 @@ theme_override_font_sizes/font_size = 10
 text = "  Components: 0"
 
 [node name="TutorialOverlay" type="CanvasLayer" parent="Root" unique_id=269075388]
+visible = false
 script = ExtResource("2_uu6xs")
 
 [node name="DarkBG" type="ColorRect" parent="Root/TutorialOverlay" unique_id=1699235496]

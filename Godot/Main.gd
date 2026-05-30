@@ -9,7 +9,9 @@ extends Control
 @onready var comp_list: ItemList = $Root/Content/Left/CompPanel/V/CompList
 @onready var hier_tree: Tree   = $Root/Content/Left/HierarchyPanel/V/Tree
 @onready var hier_del_btn: Button = $Root/Content/Left/HierarchyPanel/V/H/DelBtn
-
+@onready var left_panel: Control  = $Root/Content/Left
+@onready var center_right: Control  = $Root/Content/CenterRight
+@onready var topbar_h: HBoxContainer = $Root/TopBar/H 
 # 3D scene nodes
 @onready var scene_root: Node3D     = $Root/Content/CenterRight/Center/Tabs/Canvas/VPC/VP/Scene
 @onready var pivot: Node3D           = $Root/Content/CenterRight/Center/Tabs/Canvas/VPC/VP/Scene/Pivot
@@ -96,7 +98,9 @@ var COMPONENTS := {
 			{"name": "fr", "pos": Vector3(2.28, 2.01, -2.28), "slot": true, "allowed": ["Motor"]},
 			{"name": "bl", "pos": Vector3(-2.28, 2.01, 2.28), "slot": true, "allowed": ["Motor"]},
 			{"name": "br", "pos": Vector3(-2.28, 2.01, -2.28), "slot": true, "allowed": ["Motor"]},
-			{"name": "center_top", "pos": Vector3(0, 1.8, 0), "slot": true, "allowed": ["FC", "ESC"]},
+			#{"name": "center_top", "pos": Vector3(0, 1.8, 0), "slot": true, "allowed": ["FC", "ESC"]},
+			{"name": "fc_slot", "pos": Vector3(0, 1.8, 0), "slot": true, "allowed": ["FC"]},
+			{"name": "esc_slot", "pos": Vector3(0, 1.2, 0), "slot": true, "allowed": ["ESC"]},
 			{"name": "center_bot", "pos": Vector3(0, 0.5, 0), "slot": true, "allowed": ["Battery"]},
 		]
 	},
@@ -206,7 +210,11 @@ func _ready():
 	_create_block("start", "When ⚐ clicked", Color(0.85, 0.65, 0), Vector2(50, 50))
 	# Initialize physics bridge
 	_init_bridge()
-	_setup_wiring_tab()
+	var w2d = load("res://Wiring.gd").new()
+	w2d.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tabs.add_child(w2d)
+	_create_hier_toggle()
+	#_setup_wiring_tab()
 	_log("Flyntic Studio initialized", "success")
 
 
@@ -1570,8 +1578,20 @@ func _build_esc(root: Node3D):
 
 # ──────────────────────────── SIMULATION ──────────────────────────
 func _on_play():
+		# Check motor type trước
+	var motor_types := []
+	for c in placed:
+		if c.type == "Motor" and not motor_types.has(c.id):
+			motor_types.append(c.id)
+	
+	if motor_types.size() > 1:
+		_log("SYSTEM ERROR: Mixed motor types — all motors must be identical", "error")
+		sim_label.text = "ERROR"
+		topbar_status.text = "error"
+		return
 	var check = _preflight_check()
 	# Only block play if basic structure is missing
+	
 	if check.reason == "No frame" or check.reason == "No battery":
 		_log("SYSTEM ERROR: " + check.reason, "error")
 		sim_label.text = "ERROR"
@@ -1971,53 +1991,6 @@ func _on_hier_item_selected():
 			_highlight_component(uid)
 			_log("Selected: " + item.get_text(0), "info")
 
-#func _highlight_component(uid: int):
-	#if uid == null or uid <= 0:
-		#_log("Highlight failed: UID invalid", "error")
-		#return
-	#
-	#_log("Trying to highlight UID: " + str(uid), "info")
-	#
-	#for c in placed:
-		#if c.uid == uid:
-			#if not is_instance_valid(c.node):
-				#_log("Highlight failed: Node is null", "error")
-				#return
-			#
-			#var node = c.node
-			#_log("Found component: " + c.id + " | Meshes found:", "info")
-			#
-			#var tween = create_tween()
-			#var mesh_count = 0
-			#
-			#for child in node.get_children():
-				#if child is MeshInstance3D:
-					#mesh_count += 1
-					#var mat = child.material_override
-					#if mat:
-						#_log("  → Animating mesh: " + child.name, "success")
-						#tween.tween_property(mat, "emission_enabled", true, 0)
-						#tween.tween_property(mat, "emission", Color(0, 0.8, 1), 0.2)
-						#tween.tween_property(mat, "emission_energy_multiplier", 10.0, 0.2)
-						#tween.tween_property(child, "scale", Vector3(1.1, 1.1, 1.1), 0.2)
-						#tween.tween_property(mat, "emission_energy_multiplier", 0.0, 0.4)
-						#tween.tween_property(child, "scale", Vector3(1.0, 1.0, 1.0), 0.4)
-						#tween.tween_property(mat, "emission_enabled", false, 0)
-			#
-			#if mesh_count == 0:
-				#_log("No MeshInstance3D found at root level!", "warning")
-			#
-			#tween.finished.connect(func():
-				#if is_instance_valid(node):
-					#for ch in node.get_children():
-						#if ch is MeshInstance3D:
-							#ch.scale = Vector3.ONE
-			#)
-			#
-			#return
-	#
-	#_log("Highlight failed: UID not found in placed", "error")
-
 func _highlight_component(uid: int):
 	if uid == null or uid <= 0:
 		_log("Highlight failed: UID invalid", "error")
@@ -2074,12 +2047,15 @@ func _update_diagnostics():
 	var has_frame := false
 	var motor_count := 0
 	var prop_count := 0
-
+	var motor_types  : Array = []
 	for c in placed:
 		var c_type = c["type"]
 		if c_type == "Battery": has_bat = true
 		elif c_type == "Frame": has_frame = true
-		elif c_type == "Motor": motor_count += 1
+		elif c_type == "Motor": 
+			motor_count += 1
+			if not motor_types.has(c.id):
+				motor_types.append(c.id)
 		elif c_type == "Propeller": prop_count += 1
 
 	if not has_frame:
@@ -2092,6 +2068,8 @@ func _update_diagnostics():
 		issues.append("[color=#ff9800]Only %d motors (4 recommended)[/color]" % motor_count)
 	if prop_count < motor_count:
 		issues.append("[color=#ff9800]%d motors missing propellers[/color]" % (motor_count - prop_count))
+	if motor_count > 1 and motor_types.size() > 1:
+		issues.append("[color=#f44336]✗ Mixed motor types detected — use identical motors[/color]")
 	if issues.size() == 0:
 		issues.append("[color=#4caf50]All systems nominal[/color]")
 
@@ -2786,3 +2764,77 @@ func _focus_camera_on_drone():
 	# X = -0.2 : nhìn hơi từ trên xuống (thấp, gần ngang)
 	# Y = 0.3  : xoay nhẹ sang phải
 	camera_rot = Vector2(-0.6, 0.0) 
+
+#func _create_hier_toggle():
+	#var toggle = Button.new()
+	#toggle.text = "◀"
+	#toggle.custom_minimum_size = Vector2(20, 48)
+	#toggle.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	#
+	#var sb = StyleBoxFlat.new()
+	#sb.bg_color = Color(0.22, 0.22, 0.26)
+	#sb.corner_radius_top_right    = 6
+	#sb.corner_radius_bottom_right = 6
+	#toggle.add_theme_stylebox_override("normal", sb)
+	#toggle.add_theme_stylebox_override("hover",  sb)
+	#toggle.add_theme_font_size_override("font_size", 10)
+	#
+	#center_right.add_child(toggle)
+	#center_right.move_child(toggle, 0)
+	#
+	#toggle.pressed.connect(_toggle_hier.bind(toggle))
+#func _create_hier_toggle():
+	#var toggle = Button.new()
+	#toggle.text = "◀"
+	#toggle.custom_minimum_size = Vector2(20, 48)
+	#
+	#var sb = StyleBoxFlat.new()
+	#sb.bg_color = Color(0.22, 0.22, 0.26)
+	#sb.corner_radius_top_right    = 6
+	#sb.corner_radius_bottom_right = 6
+	#toggle.add_theme_stylebox_override("normal", sb)
+	#toggle.add_theme_stylebox_override("hover",  sb)
+	#toggle.add_theme_font_size_override("font_size", 10)
+	#
+	## Add vào Left panel, anchor về bên phải giữa
+	#left_panel.add_child(toggle)
+	#toggle.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	#toggle.set_anchor(SIDE_LEFT, 1.0)
+	#toggle.set_anchor(SIDE_RIGHT, 1.0)
+	#toggle.set_anchor(SIDE_TOP, 0.5)
+	#toggle.set_anchor(SIDE_BOTTOM, 0.5)
+	#toggle.offset_left   = 0
+	#toggle.offset_right  = 20
+	#toggle.offset_top    = -24
+	#toggle.offset_bottom = 24
+	#toggle.z_index = 10  # nổi lên trên CenterRight
+	#toggle.pressed.connect(_toggle_hier.bind(toggle))
+#
+#func _toggle_hier(toggle: Button):
+	#left_panel.visible = not left_panel.visible
+	#toggle.text = "◀" if left_panel.visible else "▶"
+func _create_hier_toggle():
+	var toggle = Button.new()
+	toggle.text = "⊞"
+	toggle.custom_minimum_size = Vector2(32, 28)
+	toggle.tooltip_text = "Toggle Hierarchy"
+	
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Color(0.22, 0.22, 0.26)
+	sb.corner_radius_top_left     = 4
+	sb.corner_radius_top_right    = 4
+	sb.corner_radius_bottom_left  = 4
+	sb.corner_radius_bottom_right = 4
+	toggle.add_theme_stylebox_override("normal", sb)
+	toggle.add_theme_stylebox_override("hover",  sb)
+	toggle.add_theme_font_size_override("font_size", 14)
+	
+	# Thêm vào đầu TopBar
+	$Root/TopBar/H.add_child(toggle)
+	$Root/TopBar/H.move_child(toggle, 0)
+	
+	toggle.pressed.connect(_toggle_hier.bind(toggle))
+
+func _toggle_hier(toggle: Button):
+	left_panel.visible = not left_panel.visible
+	toggle.text = "⊞" if not left_panel.visible else "⊟"
