@@ -37,21 +37,6 @@ const COMP_DEFS := {
 			{"name":"PHASE","side":"left","offset":0.50,"type":"motor_phase","label":"~","color":Color(0.88,0.45,0.10),"big":true},
 		]
 	},
-	#"4-in-1 ESC": {
-		#"category": "ELECTRONICS",
-		#"color": Color(0.15, 0.38, 0.72),
-		#"size": Vector2(180, 260),
-		#"shape": "rect",
-		#"ports": [
-			#{"name":"M1","side":"left","offset":0.20,"type":"esc_out","label":"M1","color":Color(0.88,0.45,0.10),"big":false},
-			#{"name":"M2","side":"left","offset":0.35,"type":"esc_out","label":"M2","color":Color(0.88,0.45,0.10),"big":false},
-			#{"name":"M3","side":"left","offset":0.50,"type":"esc_out","label":"M3","color":Color(0.88,0.45,0.10),"big":false},
-			#{"name":"M4","side":"left","offset":0.65,"type":"esc_out","label":"M4","color":Color(0.88,0.45,0.10),"big":false},
-			#{"name":"FC_BUS","side":"right","offset":0.42,"type":"signal_out","label":"FC","color":Color(0.22,0.80,0.55),"big":true},
-			#{"name":"PWR+","side":"top","offset":0.35,"type":"power_pos","label":"+","color":Color(0.88,0.22,0.22),"big":false},
-			#{"name":"PWR-","side":"top","offset":0.65,"type":"power_neg","label":"–","color":Color(0.45,0.45,0.45),"big":false},
-		#]
-	#},
 	"4-in-1 ESC": {
 	"category": "ELECTRONICS",
 	"color": Color(0.15, 0.38, 0.72),
@@ -72,6 +57,7 @@ const COMP_DEFS := {
 		# Power — trên đỉnh giữa
 		{"name":"PWR+","side":"top","offset":0.38,"type":"power_pos","label":"+","color":Color(0.88,0.22,0.22),"big":false},
 		{"name":"PWR-","side":"top","offset":0.62,"type":"power_neg","label":"–","color":Color(0.45,0.45,0.45),"big":false},
+		{"name":"GND","side":"top","offset":0.80,"type":"ground","label":"G","color":Color(0.35,0.35,0.35),"big":false},
 	]
 },
 	"ESC (Single)": {
@@ -96,7 +82,7 @@ const COMP_DEFS := {
 			{"name":"S2","side":"bottom","offset":0.36,"type":"pwm_out","label":"S2","color":Color(0.92,0.72,0.10),"big":false},
 			{"name":"S3","side":"bottom","offset":0.52,"type":"pwm_out","label":"S3","color":Color(0.92,0.72,0.10),"big":false},
 			{"name":"S4","side":"bottom","offset":0.68,"type":"pwm_out","label":"S4","color":Color(0.92,0.72,0.10),"big":false},
-			{"name":"GND","side":"bottom","offset":0.86,"type":"power_neg","label":"G","color":Color(0.45,0.45,0.45),"big":false},
+			{"name":"GND","side":"bottom","offset":0.86,"type":"ground","label":"G","color":Color(0.35,0.35,0.35),"big":false},
 			{"name":"ESC_BUS","side":"top","offset":0.50,"type":"signal_in","label":"ESC","color":Color(0.22,0.80,0.55),"big":true,"connector_style":"wide_inset"},
 		]
 	},
@@ -105,6 +91,7 @@ const COMP_DEFS := {
 const COMPATIBLE := [
 	["power_pos",  "power_pos"],
 	["power_neg",  "power_neg"],
+	["ground",     "ground"],
 	["esc_out",    "motor_phase"],
 	["signal_out", "signal_in"],
 	["pwm_out",    "signal_in"],
@@ -144,6 +131,9 @@ var rot_toolbar_rect: Rect2 = Rect2()       # screen rect of the toolbar (for hi
 var sidebar: Control       = null
 var canvas: Control        = null
 var cat_state: Dictionary  = {}
+# Bend points
+const BEND_RADIUS := 7.0
+var drag_bend: Dictionary = {}   # {conn_idx, pt_idx}
 
 # ─────────────────────────────── INIT ─────────────────────────────
 func _ready():
@@ -353,12 +343,20 @@ func _draw_canvas():
 	cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
 
 	# Connections
-	for conn in connections:
+	#for conn in connections:
+		#var fp = _port_world_pos(conn.from_comp, conn.from_port)
+		#var tp = _port_world_pos(conn.to_comp,   conn.to_port)
+		#var wc = _wire_color(conn.from_port.get("type",""))
+		#if not conn.get("valid", true): wc = Color(0.88, 0.22, 0.22)
+		#_draw_wire(fp, tp, wc)
+	# Connections
+	for i in range(connections.size()):
+		var conn = connections[i]
 		var fp = _port_world_pos(conn.from_comp, conn.from_port)
 		var tp = _port_world_pos(conn.to_comp,   conn.to_port)
 		var wc = _wire_color(conn.from_port.get("type",""))
 		if not conn.get("valid", true): wc = Color(0.88, 0.22, 0.22)
-		_draw_wire(fp, tp, wc)
+		_draw_wire(fp, tp, wc, conn.get("bend_points", []), i)
 
 	# Live wire
 	if wire_active and not wire_from.is_empty():
@@ -497,17 +495,39 @@ func _draw_component(comp: Dictionary):
 			Color(1,1,1,0.18), false, 1.0)
 
 	# Ports (in local rotated space — ports are positioned without pan/zoom since transform handles it)
+	#for port in comp.ports:
+		#_draw_port_local(cv, sz, port)
+	## Restore world transform BEFORE drawing the name so text never rotates
+	#cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
+	## Name label in world space (always upright, centered on component)
+	#cv.draw_string(ThemeDB.fallback_font,
+		#pos + Vector2(0, sz.y * 0.5 + 5),
+		#comp.name, HORIZONTAL_ALIGNMENT_CENTER, int(sz.x),
+		#int(11 * zoom_level), Color(0.95, 0.95, 0.95))
+	# Ports (in local rotated space — shape only, no label)
 	for port in comp.ports:
 		_draw_port_local(cv, sz, port)
 
-	# Restore world transform BEFORE drawing the name so text never rotates
+	# Restore world transform — tất cả text vẽ sau đây đều upright
 	cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
 
-	# Name label in world space (always upright, centered on component)
+	# Port labels — tính world pos của từng port rồi vẽ thẳng, không bị xoay
+	for port in comp.ports:
+		var wp  = _port_world_pos(comp, port)
+		var big = port.get("big", false)
+		var pc  = port.get("color", Color(0.6, 0.6, 0.6))
+		var loff = _port_label_offset_world(comp, port, big)
+		cv.draw_string(ThemeDB.fallback_font, wp + loff,
+			port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1,
+			int(9 * zoom_level), pc.lightened(0.35))
+
+	# Name label
 	cv.draw_string(ThemeDB.fallback_font,
 		pos + Vector2(0, sz.y * 0.5 + 5),
 		comp.name, HORIZONTAL_ALIGNMENT_CENTER, int(sz.x),
 		int(11 * zoom_level), Color(0.95, 0.95, 0.95))
+
+
 
 func _draw_motor(comp: Dictionary):
 	var cv  = canvas
@@ -534,13 +554,34 @@ func _draw_motor(comp: Dictionary):
 	cv.draw_circle(Vector2.ZERO, r * 0.18, col.lightened(0.2))
 
 	# Port in local space
+	#for port in comp.ports:
+		#_draw_port_local_circle(cv, r, port)
+#
+	## Restore world transform BEFORE drawing the label so text never rotates
+	#cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
+#
+	## Label in world space (centered on motor, always upright)
+	#cv.draw_string(ThemeDB.fallback_font,
+		#ctr + Vector2(-r, 5),
+		#"Motor", HORIZONTAL_ALIGNMENT_CENTER, int(r * 2),
+		#int(11 * zoom_level), Color(0.95, 0.95, 0.95))
+	# Port in local space (shape only)
 	for port in comp.ports:
 		_draw_port_local_circle(cv, r, port)
 
-	# Restore world transform BEFORE drawing the label so text never rotates
+	# Restore world transform
 	cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
 
-	# Label in world space (centered on motor, always upright)
+	# Port labels upright
+	for port in comp.ports:
+		var wp  = _port_world_pos(comp, port)
+		var big = port.get("big", false)
+		var pc  = port.get("color", Color(0.6, 0.6, 0.6))
+		var loff = _port_label_offset_world(comp, port, big)
+		cv.draw_string(ThemeDB.fallback_font, wp + loff,
+			port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1,
+			int(9 * zoom_level), pc.lightened(0.35))
+	# Motor name
 	cv.draw_string(ThemeDB.fallback_font,
 		ctr + Vector2(-r, 5),
 		"Motor", HORIZONTAL_ALIGNMENT_CENTER, int(r * 2),
@@ -608,10 +649,10 @@ func _draw_port_local(cv: Control, sz: Vector2, port: Dictionary):
 		cv.draw_circle(pp, PORT_RADIUS, pc.darkened(0.35))
 		cv.draw_arc(pp, PORT_RADIUS, 0, TAU, 18, pc, 1.8, true)
 
-	var loff = _port_label_offset(port, big)
-	cv.draw_string(ThemeDB.fallback_font, pp + loff,
-		port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1, 9,
-		pc.lightened(0.35))
+	#var loff = _port_label_offset(port, big)
+	#cv.draw_string(ThemeDB.fallback_font, pp + loff,
+		#port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1, 9,
+		#pc.lightened(0.35))
 
 
 func _draw_port_local_circle(cv: Control, r: float, port: Dictionary):
@@ -644,29 +685,72 @@ func _draw_port_local_circle(cv: Control, r: float, port: Dictionary):
 		cv.draw_circle(pp, PORT_RADIUS, pc.darkened(0.35))
 		cv.draw_arc(pp, PORT_RADIUS, 0, TAU, 18, pc, 1.8, true)
 
-	var loff = _port_label_offset(port, big)
-	cv.draw_string(ThemeDB.fallback_font, pp + loff,
-		port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1, 9,
-		pc.lightened(0.35))
+	#var loff = _port_label_offset(port, big)
+	#cv.draw_string(ThemeDB.fallback_font, pp + loff,
+		#port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1, 9,
+		#pc.lightened(0.35))
 
-func _draw_wire(from: Vector2, to: Vector2, col: Color):
-	var cv  = canvas
-	var dx  = to.x - from.x
-	var cp1 = from + Vector2(dx * 0.55, 0)
-	var cp2 = to   - Vector2(dx * 0.55, 0)
-	var pts = PackedVector2Array()
-	for i in range(25):
-		var t = float(i) / 24.0
-		pts.append(_cubic_bezier(from, cp1, cp2, to, t))
-	for i in range(pts.size() - 1):
-		cv.draw_line(pts[i], pts[i+1], col, 2.2, true)
-	cv.draw_circle(from, 4.0, col)
-	cv.draw_circle(to,   4.0, col)
+#func _draw_wire(from: Vector2, to: Vector2, col: Color):
+	#var cv  = canvas
+	#var dx  = to.x - from.x
+	#var cp1 = from + Vector2(dx * 0.55, 0)
+	#var cp2 = to   - Vector2(dx * 0.55, 0)
+	#var pts = PackedVector2Array()
+	#for i in range(25):
+		#var t = float(i) / 24.0
+		#pts.append(_cubic_bezier(from, cp1, cp2, to, t))
+	#for i in range(pts.size() - 1):
+		#cv.draw_line(pts[i], pts[i+1], col, 2.2, true)
+	#cv.draw_circle(from, 4.0, col)
+	#cv.draw_circle(to,   4.0, col)
+#
+#func _cubic_bezier(p0,p1,p2,p3: Vector2, t: float) -> Vector2:
+	#var u = 1.0 - t
+	#return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3
+	#them moi
+func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], conn_idx: int = -1):
+	var cv = canvas
 
-func _cubic_bezier(p0,p1,p2,p3: Vector2, t: float) -> Vector2:
-	var u = 1.0 - t
-	return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3
+	# Gom tất cả điểm: from → bends → to
+	var all_pts: Array[Vector2] = []
+	all_pts.append(from)
+	for bp in bend_pts:
+		all_pts.append(bp)
+	all_pts.append(to)
 
+	# Vẽ orthogonal giữa từng cặp điểm liền kề
+	for i in range(all_pts.size() - 1):
+		var a = all_pts[i]
+		var b = all_pts[i + 1]
+		var corner = Vector2(b.x, a.y)   # ngang trước, dọc sau
+		cv.draw_line(a, corner, col, 2.2, true)
+		cv.draw_line(corner, b, col, 2.2, true)
+		# Chấm tròn tại góc khuỷu để dễ thấy
+		cv.draw_circle(corner, 3.0, col.darkened(0.2))
+
+	# Endpoint dots
+	cv.draw_circle(from, 4.5, col)
+	cv.draw_circle(to,   4.5, col)
+
+	# Bend handles — chỉ vẽ khi là connection thật
+	if conn_idx >= 0:
+		for bp in bend_pts:
+			cv.draw_circle(bp, BEND_RADIUS + 2, Color(0.08, 0.08, 0.10, 0.85))
+			cv.draw_circle(bp, BEND_RADIUS, col.darkened(0.3))
+			cv.draw_arc(bp, BEND_RADIUS, 0, TAU, 18, col.lightened(0.2), 2.0, true)
+
+		# Chấm gợi ý tại giữa mỗi đoạn ngang + đoạn dọc (click để thêm bend)
+		for i in range(all_pts.size() - 1):
+			var a = all_pts[i]
+			var b = all_pts[i + 1]
+			var corner = Vector2(b.x, a.y)
+			# midpoint của đoạn ngang
+			var mh = (a + corner) * 0.5
+			# midpoint của đoạn dọc
+			var mv = (corner + b) * 0.5
+			for hint in [mh, mv]:
+				cv.draw_circle(hint, 4.0, Color(col.r, col.g, col.b, 0.18))
+				cv.draw_arc(hint, 4.0, 0, TAU, 12, Color(col.r, col.g, col.b, 0.45), 1.5, true)
 # ─────────────────────────────── INPUT ────────────────────────────
 func _canvas_input(event: InputEvent):
 	if event is InputEventMouseButton:
@@ -686,6 +770,13 @@ func _canvas_input(event: InputEvent):
 			return
 
 		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			var bh = _hit_bend_point(mp)
+			if bh.size() > 0:
+				var bps = connections[bh.conn_idx]["bend_points"]
+				bps.remove_at(bh.pt_idx)
+				connections[bh.conn_idx]["bend_points"] = bps
+				canvas.queue_redraw()
+				return
 			var comp = _hit_component(mp)
 			if comp.size() > 0:
 				ctx_uid = comp.uid
@@ -705,6 +796,21 @@ func _canvas_input(event: InputEvent):
 				# Check rotation toolbar buttons first
 				if rot_toolbar_rect.has_point(mp):
 					_handle_toolbar_click(mp)
+					return
+				var bh = _hit_bend_point(mp)
+				if bh.size() > 0:
+					drag_bend = bh
+					canvas.queue_redraw()
+					return
+
+				# Click vào hint dot → thêm bend point mới rồi kéo ngay
+				var wh = _hit_wire_hint(mp)
+				if wh.size() > 0 and not wire_active:
+					var bps = connections[wh.conn_idx].get("bend_points", [])
+					bps.insert(wh.insert_after, wh.pos)
+					connections[wh.conn_idx]["bend_points"] = bps
+					drag_bend = {"conn_idx": wh.conn_idx, "pt_idx": wh.insert_after}
+					canvas.queue_redraw()
 					return
 
 				# Port hit?
@@ -747,8 +853,18 @@ func _canvas_input(event: InputEvent):
 					drag_comp.pos = _snap_to_grid(drag_comp.pos)
 					drag_comp = {}
 					canvas.queue_redraw()
+				if drag_bend.size() > 0:
+					drag_bend = {}
+					canvas.queue_redraw()
 
 	elif event is InputEventMouseMotion:
+		if drag_bend.size() > 0:
+			var idx  = drag_bend.conn_idx
+			var pidx = drag_bend.pt_idx
+			var wpos = _screen_to_world(event.position)
+			connections[idx]["bend_points"][pidx] = wpos
+			canvas.queue_redraw()
+			return
 		if panning:
 			pan_offset = event.position - pan_start
 			canvas.queue_redraw()
@@ -840,6 +956,7 @@ func _try_connect(from: Dictionary, to: Dictionary):
 		"from_comp": from.comp, "from_port": from.port,
 		"to_comp":   to.comp,   "to_port":   to.port,
 		"valid": ok,
+		"bend_points": [],
 	})
 
 	if not ok:
@@ -934,6 +1051,7 @@ func _wire_color(t: String) -> Color:
 	match t:
 		"power_pos":   return Color(0.88, 0.22, 0.22)
 		"power_neg":   return Color(0.50, 0.50, 0.50)
+		"ground": return Color(0.38,0.38,0.38)
 		"esc_out","motor_phase": return Color(0.88, 0.50, 0.10)
 		"signal_out","signal_in": return Color(0.22, 0.82, 0.55)
 		"pwm_out":     return Color(0.92, 0.78, 0.10)
@@ -964,6 +1082,7 @@ func is_wiring_complete() -> Dictionary:
 	var has_fc = false
 	var motor_count = 0
 	
+	
 	for comp in canvas_components:
 		match comp.name:
 			"Battery": has_battery = true
@@ -988,6 +1107,7 @@ func is_wiring_complete() -> Dictionary:
 	var bat_to_esc = false      # Battery+ → ESC PWR+
 	var esc_to_fc = false       # ESC FC_BUS → FC ESC_BUS
 	var motors_connected = 0    # ESC M1-M4 → Motor PHASE
+	var esc_gnd_to_fc = false   # ESC GND → FC GND
 	
 	for conn in connections:
 		if not conn.get("valid", false):
@@ -1007,6 +1127,8 @@ func is_wiring_complete() -> Dictionary:
 		if (fn == "4-in-1 ESC" and tn == "Flight Controller") or (fn == "Flight Controller" and tn == "4-in-1 ESC"):
 			if fp in ["FC_BUS","ESC_BUS"] or tp in ["FC_BUS","ESC_BUS"]:
 				esc_to_fc = true
+			if fp == "GND" or tp == "GND":
+				esc_gnd_to_fc = true
 		
 		# ESC → Motor
 		if (fn == "4-in-1 ESC" and tn == "Motor") or (fn == "Motor" and tn == "4-in-1 ESC"):
@@ -1018,9 +1140,69 @@ func is_wiring_complete() -> Dictionary:
 	if not esc_to_fc:
 		result.reason = "Wiring: ESC not connected to Flight Controller"
 		return result
+	if not esc_gnd_to_fc:
+		result.reason = "Wiring: ESC GND not connected to Flight Controller GND"
+		return result
 	if motors_connected < motor_count:
 		result.reason = "Wiring: %d/%d motors connected to ESC" % [motors_connected, motor_count]
 		return result
 	
 	result.ok = true
 	return result
+
+# ─────────────────────────────── BEND HELPERS ─────────────────────
+func _hit_bend_point(mp: Vector2) -> Dictionary:
+	var wmp = _screen_to_world(mp)
+	for i in range(connections.size()):
+		var bps = connections[i].get("bend_points", [])
+		for j in range(bps.size()):
+			if wmp.distance_to(bps[j]) <= (BEND_RADIUS + 4.0) / zoom_level:
+				return {"conn_idx": i, "pt_idx": j}
+	return {}
+
+func _hit_wire_hint(mp: Vector2) -> Dictionary:
+	# Trả về {conn_idx, insert_after, pos} nếu click trúng hint dot giữa đoạn
+	var wmp = _screen_to_world(mp)
+	var threshold = 10.0 / zoom_level
+	for i in range(connections.size()):
+		var conn = connections[i]
+		var fp   = _port_world_pos(conn.from_comp, conn.from_port)
+		var tp   = _port_world_pos(conn.to_comp,   conn.to_port)
+		var bps  = conn.get("bend_points", [])
+		var all_pts: Array[Vector2] = []
+		all_pts.append(fp)
+		for bp in bps: all_pts.append(bp)
+		all_pts.append(tp)
+
+		for s in range(all_pts.size() - 1):
+			var a      = all_pts[s]
+			var b      = all_pts[s + 1]
+			var corner = Vector2(b.x, a.y)
+			var mh     = (a + corner) * 0.5   # midpoint đoạn ngang
+			var mv     = (corner + b) * 0.5   # midpoint đoạn dọc
+			if wmp.distance_to(mh) <= threshold:
+				return {"conn_idx": i, "insert_after": s, "pos": mh}
+			if wmp.distance_to(mv) <= threshold:
+				return {"conn_idx": i, "insert_after": s, "pos": mv}
+	return {}
+
+func _port_label_offset_world(comp: Dictionary, port: Dictionary, big: bool) -> Vector2:
+	# Tính side thực tế sau khi rotate
+	var rot  = comp.get("rotation_deg", 0)
+	var side = port.get("side", "right")
+	# Xoay side theo rotation
+	const SIDES = ["top", "right", "bottom", "left"]
+	var idx   = SIDES.find(side)
+	var steps = (rot / 90) % 4
+	var real_side = side
+	if idx >= 0:
+		real_side = SIDES[(idx + steps + 4) % 4]
+
+	var d = (PORT_RADIUS_BIG + 6) if big else (PORT_RADIUS + 5)
+	d *= zoom_level
+	match real_side:
+		"left":   return Vector2(-(d + 14 * zoom_level), 4 * zoom_level)
+		"right":  return Vector2(d + 2 * zoom_level, 4 * zoom_level)
+		"top":    return Vector2(-8 * zoom_level, -(d + 6 * zoom_level))
+		"bottom": return Vector2(-8 * zoom_level,  d + 8 * zoom_level)
+	return Vector2(d, 0)
