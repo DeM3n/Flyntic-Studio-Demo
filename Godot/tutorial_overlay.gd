@@ -11,49 +11,61 @@ func _ready():
 	highlight.visible = false
 
 	steps = [
-		{
-			"title": "Welcome to Flyntic Studio",
-			"desc": "This tutorial will help you understand the workspace and build your first drone simulation.",
-			"target": null
-		},
+	{"title":" Welcome to Flyntic Studio",
+		 "desc":"Walk through Canvas, Blocks, and Wiring workspaces. Press Next to continue.",
+		 "target":null},
 
-		{
-			"title": "Hierarchy Panel",
-			"desc": "All drone parts and objects appear here. Select an item to inspect or modify it.",
-			"target": $"../Content/Left/HierarchyPanel"
-		},
+		{"title":" Canvas — Assemble Your Drone",
+		"desc":"Place and position components here.\n• Middle-drag → Pan  •  Scroll → Zoom\n• WASD → Move camera  •  Q/E → Up/Down  •  Shift → Fast move\n• After assembly, go to Wiring tab before simulating",
+		 "target":$"../Content/CenterRight/Center"},
 
-		{
-			"title": "Components Panel",
-			"desc": "Browse available drone parts such as motors, batteries, and flight controllers.",
-			"target": $"../Content/Left/CompPanel"
-		},
+		{"title":" Hierarchy Panel",
+		 "desc":"All placed objects listed here. Click any entry to select it in the workspace.",
+		 "target":$"../Content/Left/HierarchyPanel"},
 
-		{
-			"title": "Workspace",
-			"desc": "This is where you assemble and preview your drone in real time.",
-			"target": $"../Content/CenterRight/Center"
-		}
+		{"title":" Components Panel",
+		 "desc":"Browse drone parts — motors, ESC, battery, flight controller. Click to place onto canvas.",
+		 "target":$"../Content/Left/CompPanel"},
+
+		{"title":" Blocks — Visual Programming",
+		 "desc":"Program drone behaviour without code.\n• Drag blocks from left panel\n• Connect pins to build logic",
+		 "target":$"../Content/CenterRight/Center"},
+
+		{"title":" Wiring — Circuit Connections",
+		 "desc":"Wire electrical connections between components.\n• Click a port → start wire  •  Click another port → connect\n",
+		 "target":$"../Content/CenterRight/Center"},
+
+
+
+		{"title":" You're Ready!",
+		 "desc":"1. Canvas → build shape\n2. Blocks → program behaviour\n3. Wiring → connect circuit\nPress Help anytime to replay this guide.",
+		 "target":null},
 	]
 
 	show_step()
 
 func hide_tutorial():
-
+	self.visible = false
 	dark_bg.visible = false
 	highlight.visible = false
 	$MessagePanel.visible = false
-func show_tutorial():
 
+func show_tutorial():
+	self.visible = true
 	dark_bg.visible = true
 	highlight.visible = true
 	$MessagePanel.visible = true
-func show_step():
 
+func show_step():
+ 
 	var step = steps[current_step]
 	
 	title.text = step.title
 	desc.text = step.desc
+	await get_tree().process_frame
+	$MessagePanel.reset_size()
+
+
 
 	var material = dark_bg.material
 

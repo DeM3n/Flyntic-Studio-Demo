@@ -134,6 +134,8 @@ var cat_state: Dictionary  = {}
 # Bend points
 const BEND_RADIUS := 7.0
 var drag_bend: Dictionary = {}   # {conn_idx, pt_idx}
+var hovered_wire: int = -1   
+var _pending_delete_wire: int = -1
 
 # ─────────────────────────────── INIT ─────────────────────────────
 func _ready():
@@ -157,16 +159,20 @@ func _build_ui():
 	sidebar.add_theme_stylebox_override("panel", sb_style)
 	hbox.add_child(sidebar)
 
+
 	var sv = VBoxContainer.new()
 	sv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	sv.add_theme_constant_override("separation", 0)
 	sidebar.add_child(sv)
+	sidebar.custom_minimum_size = Vector2(178, 0)
+
+
 
 	var hdr = Label.new()
-	hdr.text = "   Components"
-	hdr.add_theme_font_size_override("font_size", 11)
-	hdr.add_theme_color_override("font_color", Color(0.50, 0.50, 0.55))
-	hdr.custom_minimum_size = Vector2(0, 30)
+	hdr.text = "  COMPONENTS"
+	hdr.add_theme_font_size_override("font_size", 10)
+	hdr.add_theme_color_override("font_color", Color(0.42, 0.42, 0.50))
+	hdr.custom_minimum_size = Vector2(0, 38)
 	hdr.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	sv.add_child(hdr)
 
@@ -197,18 +203,37 @@ func _build_ui():
 	canvas.gui_input.connect(_canvas_input)
 
 func _build_category(parent: VBoxContainer, cat: String, items: Array):
+	#var btn = Button.new()
+	#btn.text = "▾  " + cat
+	#btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	#btn.flat = true
+	#btn.add_theme_font_size_override("font_size", 11)
+	#btn.add_theme_color_override("font_color", Color(0.60, 0.60, 0.65))
+	#btn.custom_minimum_size = Vector2(0, 28)
+	#var bsb = StyleBoxFlat.new()
+	#bsb.bg_color = Color(0.16, 0.16, 0.18)
+	#bsb.content_margin_left = 8
+	#for st in ["normal","hover","pressed"]:
+		#btn.add_theme_stylebox_override(st, bsb)
+	#parent.add_child(btn)
 	var btn = Button.new()
-	btn.text = "▾  " + cat
+	btn.text = "  ▾   " + cat
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn.flat = true
-	btn.add_theme_font_size_override("font_size", 11)
-	btn.add_theme_color_override("font_color", Color(0.60, 0.60, 0.65))
-	btn.custom_minimum_size = Vector2(0, 28)
+	btn.add_theme_font_size_override("font_size", 10)
+	btn.add_theme_color_override("font_color", Color(0.55, 0.55, 0.62))
+	btn.custom_minimum_size = Vector2(0, 32)
 	var bsb = StyleBoxFlat.new()
-	bsb.bg_color = Color(0.16, 0.16, 0.18)
-	bsb.content_margin_left = 8
-	for st in ["normal","hover","pressed"]:
+	bsb.bg_color = Color(0.14, 0.14, 0.16)
+	bsb.content_margin_left = 12
+	bsb.content_margin_top = 2
+	bsb.content_margin_bottom = 2
+	var bsb_hover = StyleBoxFlat.new()
+	bsb_hover.bg_color = Color(0.18, 0.18, 0.21)
+	bsb_hover.content_margin_left = 12
+	for st in ["normal","pressed"]:
 		btn.add_theme_stylebox_override(st, bsb)
+	btn.add_theme_stylebox_override("hover", bsb_hover)
 	parent.add_child(btn)
 
 	var box = VBoxContainer.new()
@@ -231,23 +256,55 @@ func _build_sidebar_item(parent: VBoxContainer, comp_name: String):
 	item.custom_minimum_size = Vector2(0, 46)
 	item.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
+	#var isb = StyleBoxFlat.new()
+	#isb.bg_color = cdef.color.darkened(0.58)
+	#isb.border_color = cdef.color.darkened(0.15)
+	#isb.border_width_left = 3
+	#isb.corner_radius_top_right = 4
+	#isb.corner_radius_bottom_right = 4
+	#isb.content_margin_left = 10
+	#item.add_theme_stylebox_override("panel", isb)
+#
+	#var lbl = Label.new()
+	#lbl.text = comp_name
+	#lbl.add_theme_font_size_override("font_size", 11)
+	#lbl.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
+	#lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	#lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	#lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	#item.add_child(lbl)
+	#parent.add_child(item)
 	var isb = StyleBoxFlat.new()
 	isb.bg_color = cdef.color.darkened(0.58)
-	isb.border_color = cdef.color.darkened(0.15)
-	isb.border_width_left = 3
-	isb.corner_radius_top_right = 4
-	isb.corner_radius_bottom_right = 4
-	isb.content_margin_left = 10
+	isb.border_color = cdef.color.lightened(0.05)
+	isb.border_width_left = 4
+	isb.corner_radius_top_right = 5
+	isb.corner_radius_bottom_right = 5
+	isb.content_margin_left = 14
+	isb.content_margin_right = 8
+	isb.content_margin_top = 4
+	isb.content_margin_bottom = 4
+	var isb_hover = isb.duplicate()
+	isb_hover.bg_color = cdef.color.darkened(0.38)
+	isb_hover.border_color = cdef.color.lightened(0.25)
 	item.add_theme_stylebox_override("panel", isb)
 
 	var lbl = Label.new()
 	lbl.text = comp_name
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", Color(0.95, 0.95, 0.95))
 	lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	lbl.offset_left = 14
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	item.add_child(lbl)
+
+	# Hover effect
+	item.mouse_entered.connect(func():
+		item.add_theme_stylebox_override("panel", isb_hover))
+	item.mouse_exited.connect(func():
+		item.add_theme_stylebox_override("panel", isb))
+
 	parent.add_child(item)
 
 	item.gui_input.connect(func(event):
@@ -265,6 +322,11 @@ func _build_context_menu():
 	ctx_menu.add_item("Reset rotation", 3)
 	add_child(ctx_menu)
 	ctx_menu.id_pressed.connect(_on_ctx_menu)
+	wire_ctx_menu = PopupMenu.new()
+	wire_ctx_menu.add_item("🗑  Delete wire", 0)
+	add_child(wire_ctx_menu)
+	wire_ctx_menu.id_pressed.connect(_on_wire_ctx_menu)
+
 
 func _on_ctx_menu(id: int):
 	match id:
@@ -685,72 +747,99 @@ func _draw_port_local_circle(cv: Control, r: float, port: Dictionary):
 		cv.draw_circle(pp, PORT_RADIUS, pc.darkened(0.35))
 		cv.draw_arc(pp, PORT_RADIUS, 0, TAU, 18, pc, 1.8, true)
 
-	#var loff = _port_label_offset(port, big)
-	#cv.draw_string(ThemeDB.fallback_font, pp + loff,
-		#port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1, 9,
-		#pc.lightened(0.35))
 
-#func _draw_wire(from: Vector2, to: Vector2, col: Color):
-	#var cv  = canvas
-	#var dx  = to.x - from.x
-	#var cp1 = from + Vector2(dx * 0.55, 0)
-	#var cp2 = to   - Vector2(dx * 0.55, 0)
-	#var pts = PackedVector2Array()
-	#for i in range(25):
-		#var t = float(i) / 24.0
-		#pts.append(_cubic_bezier(from, cp1, cp2, to, t))
-	#for i in range(pts.size() - 1):
-		#cv.draw_line(pts[i], pts[i+1], col, 2.2, true)
-	#cv.draw_circle(from, 4.0, col)
-	#cv.draw_circle(to,   4.0, col)
-#
-#func _cubic_bezier(p0,p1,p2,p3: Vector2, t: float) -> Vector2:
-	#var u = 1.0 - t
-	#return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3
-	#them moi
 func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], conn_idx: int = -1):
 	var cv = canvas
+	var is_hovered = (conn_idx >= 0 and conn_idx == hovered_wire)
+	var draw_col = Color(1.0, 1.0, 1.0, 0.85) if is_hovered else col
+	var line_w   = 4.5 if is_hovered else 2.2
 
 	# Gom tất cả điểm: from → bends → to
+	# Gom tất cả điểm
 	var all_pts: Array[Vector2] = []
 	all_pts.append(from)
 	for bp in bend_pts:
 		all_pts.append(bp)
 	all_pts.append(to)
 
-	# Vẽ orthogonal giữa từng cặp điểm liền kề
-	for i in range(all_pts.size() - 1):
-		var a = all_pts[i]
-		var b = all_pts[i + 1]
-		var corner = Vector2(b.x, a.y)   # ngang trước, dọc sau
-		cv.draw_line(a, corner, col, 2.2, true)
-		cv.draw_line(corner, b, col, 2.2, true)
-		# Chấm tròn tại góc khuỷu để dễ thấy
-		cv.draw_circle(corner, 3.0, col.darkened(0.2))
-
-	# Endpoint dots
-	cv.draw_circle(from, 4.5, col)
-	cv.draw_circle(to,   4.5, col)
-
-	# Bend handles — chỉ vẽ khi là connection thật
-	if conn_idx >= 0:
-		for bp in bend_pts:
-			cv.draw_circle(bp, BEND_RADIUS + 2, Color(0.08, 0.08, 0.10, 0.85))
-			cv.draw_circle(bp, BEND_RADIUS, col.darkened(0.3))
-			cv.draw_arc(bp, BEND_RADIUS, 0, TAU, 18, col.lightened(0.2), 2.0, true)
-
-		# Chấm gợi ý tại giữa mỗi đoạn ngang + đoạn dọc (click để thêm bend)
+	# Vẽ glow phía dưới khi hover
+	if is_hovered:
 		for i in range(all_pts.size() - 1):
 			var a = all_pts[i]
 			var b = all_pts[i + 1]
 			var corner = Vector2(b.x, a.y)
-			# midpoint của đoạn ngang
-			var mh = (a + corner) * 0.5
-			# midpoint của đoạn dọc
-			var mv = (corner + b) * 0.5
-			for hint in [mh, mv]:
-				cv.draw_circle(hint, 4.0, Color(col.r, col.g, col.b, 0.18))
-				cv.draw_arc(hint, 4.0, 0, TAU, 12, Color(col.r, col.g, col.b, 0.45), 1.5, true)
+			cv.draw_line(a, corner, Color(col.r, col.g, col.b, 0.35), 10.0, true)
+			cv.draw_line(corner, b, Color(col.r, col.g, col.b, 0.35), 10.0, true)
+
+	# Vẽ các đoạn orthogonal
+	for i in range(all_pts.size() - 1):
+		var a = all_pts[i]
+		var b = all_pts[i + 1]
+		var corner = Vector2(b.x, a.y)
+		cv.draw_line(a, corner, draw_col, line_w, true)
+		cv.draw_line(corner, b, draw_col, line_w, true)
+		cv.draw_circle(corner, 3.0 if not is_hovered else 4.5, draw_col.darkened(0.2))
+
+	# Endpoint dots
+	cv.draw_circle(from, 4.5 if not is_hovered else 6.0, draw_col)
+	cv.draw_circle(to,   4.5 if not is_hovered else 6.0, draw_col)
+
+	# Bend handles
+	if conn_idx >= 0:
+		for bp in bend_pts:
+			cv.draw_circle(bp, BEND_RADIUS + 2, Color(0.08, 0.08, 0.10, 0.85))
+			cv.draw_circle(bp, BEND_RADIUS, col.darkened(0.3))
+			cv.draw_arc(bp, BEND_RADIUS, 0, TAU, 18, draw_col.lightened(0.2), 2.0, true)
+
+		# Hint dots
+		if bend_pts.size() == 0 and not is_hovered:
+			for i in range(all_pts.size() - 1):
+				var a = all_pts[i]
+				var b = all_pts[i + 1]
+				var corner = Vector2(b.x, a.y)
+				for hint in [(a + corner) * 0.5, (corner + b) * 0.5]:
+					cv.draw_circle(hint, 4.0, Color(col.r, col.g, col.b, 0.18))
+					cv.draw_arc(hint, 4.0, 0, TAU, 12, Color(col.r, col.g, col.b, 0.45), 1.5, true)
+	#var all_pts: Array[Vector2] = []
+	#all_pts.append(from)
+	#for bp in bend_pts:
+		#all_pts.append(bp)
+	#all_pts.append(to)
+	#
+	## Vẽ orthogonal giữa từng cặp điểm liền kề
+	#for i in range(all_pts.size() - 1):
+		#var a = all_pts[i]
+		#var b = all_pts[i + 1]
+		#var corner = Vector2(b.x, a.y)   # ngang trước, dọc sau
+		#cv.draw_line(a, corner, col, 2.2, true)
+		#cv.draw_line(corner, b, col, 2.2, true)
+		## Chấm tròn tại góc khuỷu để dễ thấy
+		#cv.draw_circle(corner, 3.0, col.darkened(0.2))
+#
+	## Endpoint dots
+	#cv.draw_circle(from, 4.5, col)
+	#cv.draw_circle(to,   4.5, col)
+#
+	## Bend handles — chỉ vẽ khi là connection thật
+	#if conn_idx >= 0:
+		#for bp in bend_pts:
+			#cv.draw_circle(bp, BEND_RADIUS + 2, Color(0.08, 0.08, 0.10, 0.85))
+			#cv.draw_circle(bp, BEND_RADIUS, col.darkened(0.3))
+			#cv.draw_arc(bp, BEND_RADIUS, 0, TAU, 18, col.lightened(0.2), 2.0, true)
+#
+		## Chấm gợi ý tại giữa mỗi đoạn ngang + đoạn dọc (click để thêm bend)
+		#for i in range(all_pts.size() - 1):
+			#var a = all_pts[i]
+			#var b = all_pts[i + 1]
+			#var corner = Vector2(b.x, a.y)
+			## midpoint của đoạn ngang
+			#var mh = (a + corner) * 0.5
+			## midpoint của đoạn dọc
+			#var mv = (corner + b) * 0.5
+			#for hint in [mh, mv]:
+				#cv.draw_circle(hint, 4.0, Color(col.r, col.g, col.b, 0.18))
+				#cv.draw_arc(hint, 4.0, 0, TAU, 12, Color(col.r, col.g, col.b, 0.45), 1.5, true)
+				
 # ─────────────────────────────── INPUT ────────────────────────────
 func _canvas_input(event: InputEvent):
 	if event is InputEventMouseButton:
@@ -776,6 +865,13 @@ func _canvas_input(event: InputEvent):
 				bps.remove_at(bh.pt_idx)
 				connections[bh.conn_idx]["bend_points"] = bps
 				canvas.queue_redraw()
+				return
+			# Right-click vào wire → hiện menu xoá wire
+			var wi = _hit_wire(mp)
+			if wi >= 0:
+				hovered_wire = wi
+				canvas.queue_redraw()
+				_show_wire_context_menu(wi, mp)
 				return
 			var comp = _hit_component(mp)
 			if comp.size() > 0:
@@ -858,6 +954,10 @@ func _canvas_input(event: InputEvent):
 					canvas.queue_redraw()
 
 	elif event is InputEventMouseMotion:
+		var new_hovered = _hit_wire(event.position)
+		if new_hovered != hovered_wire:
+			hovered_wire = new_hovered
+			canvas.queue_redraw()
 		if drag_bend.size() > 0:
 			var idx  = drag_bend.conn_idx
 			var pidx = drag_bend.pt_idx
@@ -1073,6 +1173,40 @@ func _get_selected_comp() -> Dictionary:
 			return comp
 	return {}
 
+# ─────────────────────────────── WIRE HIT TEST ────────────────────
+func _hit_wire(mp: Vector2) -> int:
+	# Trả về conn_idx nếu click/hover gần wire, -1 nếu không
+	var wmp = _screen_to_world(mp)
+	var threshold = 6.0 / zoom_level
+	for i in range(connections.size()):
+		var conn = connections[i]
+		var fp   = _port_world_pos(conn.from_comp, conn.from_port)
+		var tp   = _port_world_pos(conn.to_comp,   conn.to_port)
+		var bps  = conn.get("bend_points", [])
+		var all_pts: Array[Vector2] = []
+		all_pts.append(fp)
+		for bp in bps: all_pts.append(bp)
+		all_pts.append(tp)
+		# Kiểm tra từng đoạn (ngang + dọc)
+		for s in range(all_pts.size() - 1):
+			var a      = all_pts[s]
+			var b      = all_pts[s + 1]
+			var corner = Vector2(b.x, a.y)
+			# Đoạn ngang: a → corner
+			if _dist_point_segment(wmp, a, corner) <= threshold:
+				return i
+			# Đoạn dọc: corner → b
+			if _dist_point_segment(wmp, corner, b) <= threshold:
+				return i
+	return -1
+
+func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab = b - a
+	var len_sq = ab.dot(ab)
+	if len_sq < 0.0001: return p.distance_to(a)
+	var t = clamp((p - a).dot(ab) / len_sq, 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
 func is_wiring_complete() -> Dictionary:
 	var result = {"ok": false, "reason": ""}
 	
@@ -1206,3 +1340,23 @@ func _port_label_offset_world(comp: Dictionary, port: Dictionary, big: bool) -> 
 		"top":    return Vector2(-8 * zoom_level, -(d + 6 * zoom_level))
 		"bottom": return Vector2(-8 * zoom_level,  d + 8 * zoom_level)
 	return Vector2(d, 0)
+
+var wire_ctx_menu: PopupMenu = null
+func _show_wire_context_menu(conn_idx: int, mp: Vector2):
+	_pending_delete_wire = conn_idx
+	wire_ctx_menu.set_item_text(0, "Delete wire  (%s → %s)" % [
+		connections[conn_idx].from_port.get("label", "?"),
+		connections[conn_idx].to_port.get("label", "?")
+	])
+	wire_ctx_menu.position = Vector2i(
+		int(canvas.global_position.x + mp.x),
+		int(canvas.global_position.y + mp.y)
+	)
+	wire_ctx_menu.popup()
+
+func _on_wire_ctx_menu(id: int):
+	if id == 0 and hovered_wire >= 0 and hovered_wire < connections.size():
+		connections.remove_at(hovered_wire)
+	_pending_delete_wire = -1
+	hovered_wire = -1
+	canvas.queue_redraw()

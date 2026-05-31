@@ -902,6 +902,8 @@ func _build_grid():
 
 # ──────────────────────────── INPUT ───────────────────────────────
 func _input(event):
+	if $Root/TutorialOverlay.visible:
+		return
 	# CRITICAL: Ignore 3D interactions if we are not ở Canvas tab hoặc đang simulation
 	if tabs.current_tab != 0:
 		orbiting = false
@@ -913,21 +915,7 @@ func _input(event):
 
 	if event is InputEventMouseButton:
 		var in_canvas = vpc.get_global_rect().has_point(get_global_mouse_position())
-#==========Wiring Mode ======================
-		#if wiring_mode and in_canvas and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not sim_locked:
-			#var hit_port = _raycast_port()
-			#if hit_port:
-				#if not wiring_drag_active:
-					#wiring_drag_active = true
-					#wiring_drag_from = hit_port
-					#wire_drag_mesh = _create_drag_wire()
-					#_log("Wire: From " + hit_port.port_name, "info")
-				#else:
-					#_try_connect_wire(hit_port)
-		#else:
-			#_cancel_wire_drag()
-			#return
-#=================End wiring mode
+
 		match event.button_index:
 			MOUSE_BUTTON_LEFT:
 				if event.pressed:
