@@ -241,59 +241,6 @@ func _on_bridge_disconnected():
 	bridge_connected = false
 	_log("Bridge: Disconnected — using kinematic fallback", "warning")
 
-#func _setup_blocks():
-	## Wire up toolbox buttons to spawn blocks
-	#for child in toolbox_v.get_children():
-		#if is_instance_valid(child) and (child is Button or child is Panel):
-			#child.gui_input.connect(_on_toolbox_input.bind(child))
-#
-#func _on_toolbox_input(event, node):
-	#if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		#var type = node.name.to_lower()
-		#var label = ""
-		#var color = Color(1, 0.7, 0)
-		#
-		#match type:
-			#"b1": # Events
-				#label = "When ⚐ clicked"
-				#type = "start"
-			#"bt1": # Take off
-				#label = "Take Off"
-				#type = "take_off"
-				#color = Color(0.3, 0.6, 1.0)
-			#"bm1": # Forward
-				#label = "Forward [ 50 ] cm"
-				#type = "forward"
-				#color = Color(0.25, 0.55, 0.95)
-			#"bm2": # Hover
-				#label = "Hover (2s)"
-				#type = "hover"
-				#color = Color(0.2, 0.5, 0.9)
-			#"bl1": # Land
-				#label = "Land drone"
-				#type = "land"
-				#color = Color(0.9, 0.5, 0.1)
-#
-		#_create_block(type, label, color, get_global_mouse_position() - workspace.global_position + Vector2(10, 0))
-
-#func _setup_blocks():
-	## Khởi tạo trạng thái collapse (mặc định: tất cả mở)
-	#for cat in BLOCK_CATEGORIES:
-		#if not _cat_collapsed.has(cat):
-			#_block_cat_collapsed [cat] = false
-		#_build_toolbox()
-#
-#func _on_toolbox_input(event, node):
-	#if event is InputEventMouseButton \
-	#and event.button_index == MOUSE_BUTTON_LEFT \
-	#and event.pressed:
-		#if not node.has_meta("block_type"):
-			#return
-		#var type:  String = node.get_meta("block_type")
-		#var label: String = node.get_meta("block_label")
-		#var color: Color  = node.get_meta("block_color")
-		#_create_block(type, label, color,
-			#get_global_mouse_position() - workspace.global_position + Vector2(10, 0))
 
 func _setup_blocks():
 	_active_block_cat = "BtnE"
@@ -346,41 +293,7 @@ func _on_toolbox_input(event, node):
 			get_global_mouse_position() - workspace.global_position + Vector2(10, 0)
 )
 
-#func _build_block_list():
-	## Xóa blocks cũ, giữ trash zone
-	#for child in toolbox_v.get_children():
-		#if is_instance_valid(child) and child.name != "TrashZone":
-			#child.queue_free()
-	#
-	#var entries = BLOCK_CATEGORIES.get(_active_block_cat, {}).get("blocks", [])
-	#
-	#if entries.is_empty():
-		#var lbl = Label.new()
-		#lbl.text = "No blocks yet"
-		#lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.45))
-		#lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		#toolbox_v.add_child(lbl)
-		#return
-	#for entry in entries:
-		#var btn = Button.new()
-		#btn.text    = entry["label"]
-		#btn.custom_minimum_size = Vector2(0, 40)
-		#btn.size_flags_horizontal = Control.SIZE_FILL
-		#
-		#var bsb = StyleBoxFlat.new()
-		#bsb.bg_color = entry["color"]
-		#bsb.corner_radius_top_left    = 8
-		#bsb.corner_radius_top_right   = 8
-		#bsb.corner_radius_bottom_left = 8
-		#bsb.corner_radius_bottom_right = 8
-		#btn.add_theme_stylebox_override("normal", bsb)
-		#btn.add_theme_font_size_override("font_size", 11)
-		#
-		#btn.set_meta("block_type",  entry["type"])
-		#btn.set_meta("block_label", entry["label"])
-		#btn.set_meta("block_color", entry["color"])
-		#btn.gui_input.connect(_on_toolbox_input.bind(btn))
-		#toolbox_v.add_child(btn)
+
 func _build_block_list():
 	for child in toolbox_v.get_children():
 		if is_instance_valid(child) and child.name != "TrashZone":
@@ -493,6 +406,7 @@ var _dragging_block: Panel = null
 
 func _create_block(type: String, text: String, color: Color, pos: Vector2):
 	var b = Panel.new()
+	b.z_index = 0
 	b.set_script(block_script)
 	b.custom_minimum_size = Vector2(190, 48) # Slightly taller for notches
 	b.block_type = type
@@ -654,84 +568,8 @@ func _create_trash_zone():
 
 
 var snap_preview: Panel = null
-#func _check_snapping(moving_block: Panel):
-	#if not is_instance_valid(moving_block): return
-	#if trash_panel: trash_panel.visible = false
-	#
-	## Xóa preview cũ
-	#if is_instance_valid(snap_preview):
-		#snap_preview.queue_free()
-		#snap_preview = null
-#
-	#var mpos = get_global_mouse_position()
-	#
-	## 1. DELETE
-	#if is_instance_valid(toolbox) and toolbox.get_global_rect().has_point(mpos):
-		#moving_block.queue_free()
-		#_log("Block deleted", "warning")
-		#return
-#
-	## 2. Preparation
-	#var old_pos = moving_block.global_position
-	#if moving_block.get_parent() != workspace:
-		#moving_block.get_parent().remove_child(moving_block)
-		#workspace.add_child(moving_block)
-		#moving_block.global_position = old_pos
-#
-	## 3. TÌM BEST PARENT ĐỂ SNAP
-	#var best_parent = null
-	#var min_dist = 40.0
-	#var best_snap_pos = Vector2.ZERO
-	#
-	#var all_blocks = _get_all_blocks(workspace)
-	#for other in all_blocks:
-		#if not is_instance_valid(other): continue
-		#if other == moving_block: continue
-		#if other.is_ancestor_of(moving_block): continue
-		#
-		#var other_bottom_global = other.global_position + Vector2(0, other.size.y)
-		#var d = moving_block.global_position.distance_to(other_bottom_global)
-		#var dx = abs(moving_block.global_position.x - other.global_position.x)
-		#
-		#if d < min_dist and dx < 50:
-			#min_dist = d
-			#best_parent = other
-			#best_snap_pos = other_bottom_global
-#
-	## === GHOST PREVIEW (chỉ thêm phần này) ===
-	#if best_parent:
-		#snap_preview = Panel.new()
-		#snap_preview.custom_minimum_size = moving_block.custom_minimum_size
-		#snap_preview.modulate = Color(1, 1, 1, 0.3)   # Độ trong của ghost
-		#snap_preview.position = best_snap_pos
-		#workspace.add_child(snap_preview)
-		#
-		#var style = moving_block.get_theme_stylebox("panel").duplicate()
-		#if style is StyleBoxFlat:
-			#style.shadow_size = 0
-			#style.bg_color.a = 0.25
-		#snap_preview.add_theme_stylebox_override("panel", style)
-#
-#
-	#if best_parent and is_instance_valid(best_parent):
-		## Target = ngay bên dưới best_parent, cùng X
-		#print("best_parent.position: ", best_parent.position)
-		#print("best_parent.custom_minimum_size: ", best_parent.custom_minimum_size)
-		#print("moving_block.custom_minimum_size: ", moving_block.custom_minimum_size)
-		#var target_pos = best_parent.position + Vector2(0, best_parent.custom_minimum_size.y)
-		#print("target_pos: ", target_pos)
-		#
-		#moving_block.z_index = best_parent.z_index + 1
-		#moving_block.position = target_pos + Vector2(0, -20)
-		#
-		#var tween = create_tween()
-		#tween.set_ease(Tween.EASE_OUT)
-		#tween.set_trans(Tween.TRANS_ELASTIC)
-		#tween.tween_property(moving_block, "position", target_pos, 0.4)
-		#
-		#_play_snap_sound()
-		#_log("Snapped to stack", "success")
-#
+
+
 
 func _check_snapping(moving_block: Panel):
 	if not is_instance_valid(moving_block): return
@@ -810,13 +648,44 @@ func _check_snapping(moving_block: Panel):
 		var target_pos = best_parent.position + Vector2(0, best_parent.custom_minimum_size.y)
 		moving_block.z_index = best_parent.z_index + 1
 		moving_block.position = target_pos + Vector2(0, -20)
-
 		var tween = create_tween()
 		tween.set_ease(Tween.EASE_OUT)
 		tween.set_trans(Tween.TRANS_ELASTIC)
 		tween.tween_property(moving_block, "position", target_pos, 0.4)
 		_play_snap_sound()
 		_log("Snapped to stack", "success")
+		  # ── Reposition toàn bộ stack bên dưới moving_block ──
+		tween.tween_callback(func():
+			var current = moving_block
+			while is_instance_valid(current):
+				var next = _find_block_below(current)
+				if not is_instance_valid(next): break
+				var correct_pos = current.position + Vector2(0, current.custom_minimum_size.y )
+				next.position = correct_pos
+				current = next
+)
+		###them moi
+			## ── Tìm root của stack ──
+		#var root = best_parent
+		#while true:
+			#var found_parent = false
+			#for b in _get_all_blocks(workspace):
+				#if not is_instance_valid(b): continue
+				#if b == root: continue
+				#if _find_block_below(b) == root:
+					#root = b
+					#found_parent = true
+					#break
+			#if not found_parent:
+				#break
+	#
+	## ── Gán z_index từ root xuống, root cao nhất ──
+		#var current = root
+		#var z = 100
+		#while is_instance_valid(current):
+			#current.z_index = z
+			#z -= 1
+			#current = _find_block_below(current)
 
 # Helper to find all blocks regardless of nesting
 func _get_all_blocks(parent_node) -> Array:
@@ -830,22 +699,6 @@ func _get_all_blocks(parent_node) -> Array:
 	return list
 
 # ──────────────────────────── UI BUILD ────────────────────────────
-#func _build_comp_list():
-	#comp_list.clear()
-	#for cat in CATEGORIES:
-		#var ci = comp_list.add_item("▸ " + cat)
-		#comp_list.set_item_selectable(ci, false)
-		#comp_list.set_item_custom_fg_color(ci, Color(0.5, 0.5, 0.5))
-		#for cid in CATEGORIES[cat]:
-			#if COMPONENTS.has(cid):
-				#var ii = comp_list.add_item("   " + cid)
-				#comp_list.set_item_metadata(ii, cid)
-				#var c = COMPONENTS[cid]
-				#match c.type:
-					#"Motor": comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.4, 0.4))
-					#"Battery": comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.8, 0.2))
-					#"Frame": comp_list.set_item_custom_fg_color(ii, Color(0.7, 0.7, 0.7))
-					#_: comp_list.set_item_custom_fg_color(ii, Color(0.6, 0.7, 0.8))
 
 func _build_floor():
 	var m = MeshInstance3D.new()
@@ -1003,13 +856,7 @@ func _process(_delta):
 		if Input.is_key_pressed(KEY_SHIFT): speed *= 3.0
 		pivot.global_position += move_vec.normalized() * _delta * speed
 
-	# Update camera transform based on rot/zoom
-	#if tabs.current_tab == 0:
-		#pivot.rotation.y = camera_rot.y
-		#pivot.rotation.x = camera_rot.x
-		#camera.position.z = zoom
-		#camera.position.y = 0 # Camera is child of pivot, pivot handles X/Y rotation
-	# Thay phần update camera trong _process:
+
 	if tabs.current_tab == 0:
 		pivot.rotation = Vector3.ZERO
 		pivot.rotate(Vector3.UP, camera_rot.y)        # Yaw trước (world UP)
@@ -1022,28 +869,7 @@ func _process(_delta):
 	if sim_state == "playing":
 		_simulate(_delta)
 	_update_block_snap_preview()
-# WIRING TYPING SHIT
-	if wiring_mode and wiring_drag_active and is_instance_valid(wire_drag_mesh):
-		var mpos = viewport.get_mouse_position()
-		var ro = camera.project_ray_origin(mpos)
-		var rd = camera.project_ray_normal(mpos)
-		var plane = Plane(Vector3.UP, wiring_drag_from.port_pos.y)
-		var hit = plane.intersects_ray(ro, rd)
 
-		if hit:
-			_clear_children(wire_drag_mesh)
-			var to_pos = hit
-			var hover = _raycast_port()
-			var wire_color = Color(0.8, 0.8, 0.1)
-			if hover and hover.uid != wiring_drag_from.uid:
-				if hover.port_type == wiring_drag_from.port_type:
-					wire_color = Color(0.1, 0.9, 0.3)
-					to_pos = hover.port_pos
-				else:
-					wire_color = Color(0.9, 0.1, 0.1)
-			_draw_bezier_wire(wire_drag_mesh, wiring_drag_from.port_pos, to_pos, wire_color)
-
-#ENDING OF WIRING TYPING SHIT
 
 func _update_block_snap_preview():
 # Tìm block đang drag bằng cách scan tất cả blocks
@@ -1104,26 +930,6 @@ func _clear_preview():
 		snap_preview = null
 
 
-
-
-# ──────────────────────────── GHOST / PLACEMENT ───────────────────
-#func _on_item_selected(idx: int):
-	#var id = comp_list.get_item_metadata(idx)
-	#if id == null:
-		#return
-	#if id == "PVC Pipe Frame" or id == "Carbon Fiber Body":
-		#for c in placed:
-			#if c.type == "Frame":
-				#_log("Only one frame allowed!", "error")
-				#return
-	#cur_id = id
-	#_cancel_ghost()
-	#ghost = _build_mesh(id, true)
-	#components_group.add_child(ghost)
-	#_show_snap_hints(id)
-	#
-	## Deselect so it can be clicked again
-	#comp_list.deselect_all()
 func _on_item_selected(idx: int):
 	var meta = comp_list.get_item_metadata(idx)
 	if meta == null:
@@ -2092,6 +1898,12 @@ func _log(msg: String, type: String = "info"):
 		"warning": c = "#ff9800"
 	var t = Time.get_time_string_from_system()
 	log_box.append_text("[color=%s][%s] %s[/color]\n" % [c, t, msg])
+		# Auto-scroll xuống nếu người dùng không đang scroll lên xem log cũ
+	var scrollbar = log_box.get_v_scroll_bar()
+	var is_at_bottom = scrollbar.value >= (scrollbar.max_value - scrollbar.page - 5.0)
+	if is_at_bottom:
+		await get_tree().process_frame
+		log_box.scroll_to_line(log_box.get_line_count() - 1)
 	
 func _play_snap_sound():
 	var player = AudioStreamPlayer.new()

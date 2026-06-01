@@ -256,24 +256,7 @@ func _build_sidebar_item(parent: VBoxContainer, comp_name: String):
 	item.custom_minimum_size = Vector2(0, 46)
 	item.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
-	#var isb = StyleBoxFlat.new()
-	#isb.bg_color = cdef.color.darkened(0.58)
-	#isb.border_color = cdef.color.darkened(0.15)
-	#isb.border_width_left = 3
-	#isb.corner_radius_top_right = 4
-	#isb.corner_radius_bottom_right = 4
-	#isb.content_margin_left = 10
-	#item.add_theme_stylebox_override("panel", isb)
-#
-	#var lbl = Label.new()
-	#lbl.text = comp_name
-	#lbl.add_theme_font_size_override("font_size", 11)
-	#lbl.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
-	#lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	#lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	#lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	#item.add_child(lbl)
-	#parent.add_child(item)
+
 	var isb = StyleBoxFlat.new()
 	isb.bg_color = cdef.color.darkened(0.58)
 	isb.border_color = cdef.color.lightened(0.05)
@@ -404,13 +387,6 @@ func _draw_canvas():
 	# Apply zoom+pan transform for all world-space drawing
 	cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
 
-	# Connections
-	#for conn in connections:
-		#var fp = _port_world_pos(conn.from_comp, conn.from_port)
-		#var tp = _port_world_pos(conn.to_comp,   conn.to_port)
-		#var wc = _wire_color(conn.from_port.get("type",""))
-		#if not conn.get("valid", true): wc = Color(0.88, 0.22, 0.22)
-		#_draw_wire(fp, tp, wc)
 	# Connections
 	for i in range(connections.size()):
 		var conn = connections[i]
@@ -556,16 +532,7 @@ func _draw_component(comp: Dictionary):
 		cv.draw_rect(Rect2(local_pos - Vector2(3,3), sz + Vector2(6,6)),
 			Color(1,1,1,0.18), false, 1.0)
 
-	# Ports (in local rotated space — ports are positioned without pan/zoom since transform handles it)
-	#for port in comp.ports:
-		#_draw_port_local(cv, sz, port)
-	## Restore world transform BEFORE drawing the name so text never rotates
-	#cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
-	## Name label in world space (always upright, centered on component)
-	#cv.draw_string(ThemeDB.fallback_font,
-		#pos + Vector2(0, sz.y * 0.5 + 5),
-		#comp.name, HORIZONTAL_ALIGNMENT_CENTER, int(sz.x),
-		#int(11 * zoom_level), Color(0.95, 0.95, 0.95))
+
 	# Ports (in local rotated space — shape only, no label)
 	for port in comp.ports:
 		_draw_port_local(cv, sz, port)
@@ -615,19 +582,7 @@ func _draw_motor(comp: Dictionary):
 	cv.draw_arc(Vector2.ZERO, r * 0.40, 0, TAU, 24, col.lightened(0.15), 1.0, true)
 	cv.draw_circle(Vector2.ZERO, r * 0.18, col.lightened(0.2))
 
-	# Port in local space
-	#for port in comp.ports:
-		#_draw_port_local_circle(cv, r, port)
-#
-	## Restore world transform BEFORE drawing the label so text never rotates
-	#cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
-#
-	## Label in world space (centered on motor, always upright)
-	#cv.draw_string(ThemeDB.fallback_font,
-		#ctr + Vector2(-r, 5),
-		#"Motor", HORIZONTAL_ALIGNMENT_CENTER, int(r * 2),
-		#int(11 * zoom_level), Color(0.95, 0.95, 0.95))
-	# Port in local space (shape only)
+
 	for port in comp.ports:
 		_draw_port_local_circle(cv, r, port)
 
@@ -711,10 +666,7 @@ func _draw_port_local(cv: Control, sz: Vector2, port: Dictionary):
 		cv.draw_circle(pp, PORT_RADIUS, pc.darkened(0.35))
 		cv.draw_arc(pp, PORT_RADIUS, 0, TAU, 18, pc, 1.8, true)
 
-	#var loff = _port_label_offset(port, big)
-	#cv.draw_string(ThemeDB.fallback_font, pp + loff,
-		#port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1, 9,
-		#pc.lightened(0.35))
+
 
 
 func _draw_port_local_circle(cv: Control, r: float, port: Dictionary):
@@ -751,7 +703,7 @@ func _draw_port_local_circle(cv: Control, r: float, port: Dictionary):
 func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], conn_idx: int = -1):
 	var cv = canvas
 	var is_hovered = (conn_idx >= 0 and conn_idx == hovered_wire)
-	var draw_col = Color(1.0, 1.0, 1.0, 0.85) if is_hovered else col
+	var draw_col = col.lightened(0.25) if is_hovered else col
 	var line_w   = 4.5 if is_hovered else 2.2
 
 	# Gom tất cả điểm: from → bends → to
@@ -768,8 +720,8 @@ func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], co
 			var a = all_pts[i]
 			var b = all_pts[i + 1]
 			var corner = Vector2(b.x, a.y)
-			cv.draw_line(a, corner, Color(col.r, col.g, col.b, 0.35), 10.0, true)
-			cv.draw_line(corner, b, Color(col.r, col.g, col.b, 0.35), 10.0, true)
+			cv.draw_line(a, corner, Color(col.r, col.g, col.b, 0.10), 8.0, true)
+			cv.draw_line(corner, b, Color(col.r, col.g, col.b, 0.10), 8.0, true)
 
 	# Vẽ các đoạn orthogonal
 	for i in range(all_pts.size() - 1):
@@ -778,7 +730,7 @@ func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], co
 		var corner = Vector2(b.x, a.y)
 		cv.draw_line(a, corner, draw_col, line_w, true)
 		cv.draw_line(corner, b, draw_col, line_w, true)
-		cv.draw_circle(corner, 3.0 if not is_hovered else 4.5, draw_col.darkened(0.2))
+		cv.draw_circle(corner, 4.0 if not is_hovered else 5.5, draw_col.darkened(0.2))
 
 	# Endpoint dots
 	cv.draw_circle(from, 4.5 if not is_hovered else 6.0, draw_col)
@@ -800,46 +752,7 @@ func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], co
 				for hint in [(a + corner) * 0.5, (corner + b) * 0.5]:
 					cv.draw_circle(hint, 4.0, Color(col.r, col.g, col.b, 0.18))
 					cv.draw_arc(hint, 4.0, 0, TAU, 12, Color(col.r, col.g, col.b, 0.45), 1.5, true)
-	#var all_pts: Array[Vector2] = []
-	#all_pts.append(from)
-	#for bp in bend_pts:
-		#all_pts.append(bp)
-	#all_pts.append(to)
-	#
-	## Vẽ orthogonal giữa từng cặp điểm liền kề
-	#for i in range(all_pts.size() - 1):
-		#var a = all_pts[i]
-		#var b = all_pts[i + 1]
-		#var corner = Vector2(b.x, a.y)   # ngang trước, dọc sau
-		#cv.draw_line(a, corner, col, 2.2, true)
-		#cv.draw_line(corner, b, col, 2.2, true)
-		## Chấm tròn tại góc khuỷu để dễ thấy
-		#cv.draw_circle(corner, 3.0, col.darkened(0.2))
-#
-	## Endpoint dots
-	#cv.draw_circle(from, 4.5, col)
-	#cv.draw_circle(to,   4.5, col)
-#
-	## Bend handles — chỉ vẽ khi là connection thật
-	#if conn_idx >= 0:
-		#for bp in bend_pts:
-			#cv.draw_circle(bp, BEND_RADIUS + 2, Color(0.08, 0.08, 0.10, 0.85))
-			#cv.draw_circle(bp, BEND_RADIUS, col.darkened(0.3))
-			#cv.draw_arc(bp, BEND_RADIUS, 0, TAU, 18, col.lightened(0.2), 2.0, true)
-#
-		## Chấm gợi ý tại giữa mỗi đoạn ngang + đoạn dọc (click để thêm bend)
-		#for i in range(all_pts.size() - 1):
-			#var a = all_pts[i]
-			#var b = all_pts[i + 1]
-			#var corner = Vector2(b.x, a.y)
-			## midpoint của đoạn ngang
-			#var mh = (a + corner) * 0.5
-			## midpoint của đoạn dọc
-			#var mv = (corner + b) * 0.5
-			#for hint in [mh, mv]:
-				#cv.draw_circle(hint, 4.0, Color(col.r, col.g, col.b, 0.18))
-				#cv.draw_arc(hint, 4.0, 0, TAU, 12, Color(col.r, col.g, col.b, 0.45), 1.5, true)
-				
+
 # ─────────────────────────────── INPUT ────────────────────────────
 func _canvas_input(event: InputEvent):
 	if event is InputEventMouseButton:
@@ -1344,7 +1257,7 @@ func _port_label_offset_world(comp: Dictionary, port: Dictionary, big: bool) -> 
 var wire_ctx_menu: PopupMenu = null
 func _show_wire_context_menu(conn_idx: int, mp: Vector2):
 	_pending_delete_wire = conn_idx
-	wire_ctx_menu.set_item_text(0, "Delete wire  (%s → %s)" % [
+	wire_ctx_menu.set_item_text(0, "Delete wire" % [
 		connections[conn_idx].from_port.get("label", "?"),
 		connections[conn_idx].to_port.get("label", "?")
 	])
