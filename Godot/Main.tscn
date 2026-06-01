@@ -183,14 +183,20 @@ theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 12
 text = "Components"
 
-[node name="M6" type="Label" parent="Root/TopBar/H/Menus" unique_id=536142979]
+[node name="M6" type="Button" parent="Root/TopBar/H/Menus" unique_id=225423188]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 12
 text = "Window"
 
-[node name="M8" type="Button" parent="Root/TopBar/H/Menus" unique_id=1277112993]
-custom_minimum_size = Vector2(20, 20)
+[node name="M8" type="Button" parent="Root/TopBar/H/Menus" unique_id=758809879]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "Help"
+
+[node name="M9" type="Button" parent="Root/TopBar/H/Menus" unique_id=1277112993]
+visible = false
 layout_mode = 2
 text = "Help"
 
@@ -872,4 +878,5 @@ size_flags_vertical = 8
 text = "Next"
 
 [connection signal="pressed" from="Root/TopBar/H/Menus/M8" to="Root/TutorialOverlay" method="_on_m_8_pressed"]
+[connection signal="pressed" from="Root/TopBar/H/Menus/M9" to="Root/TutorialOverlay" method="_on_m_8_pressed"]
 [connection signal="pressed" from="Root/TutorialOverlay/MessagePanel/NextButton" to="Root/TutorialOverlay" method="_on_next_button_pressed"]
