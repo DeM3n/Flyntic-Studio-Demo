@@ -2546,54 +2546,7 @@ func _focus_camera_on_drone():
 	# Y = 0.3  : xoay nhẹ sang phải
 	camera_rot = Vector2(-0.6, 0.0) 
 
-#func _create_hier_toggle():
-	#var toggle = Button.new()
-	#toggle.text = "◀"
-	#toggle.custom_minimum_size = Vector2(20, 48)
-	#toggle.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	#
-	#var sb = StyleBoxFlat.new()
-	#sb.bg_color = Color(0.22, 0.22, 0.26)
-	#sb.corner_radius_top_right    = 6
-	#sb.corner_radius_bottom_right = 6
-	#toggle.add_theme_stylebox_override("normal", sb)
-	#toggle.add_theme_stylebox_override("hover",  sb)
-	#toggle.add_theme_font_size_override("font_size", 10)
-	#
-	#center_right.add_child(toggle)
-	#center_right.move_child(toggle, 0)
-	#
-	#toggle.pressed.connect(_toggle_hier.bind(toggle))
-#func _create_hier_toggle():
-	#var toggle = Button.new()
-	#toggle.text = "◀"
-	#toggle.custom_minimum_size = Vector2(20, 48)
-	#
-	#var sb = StyleBoxFlat.new()
-	#sb.bg_color = Color(0.22, 0.22, 0.26)
-	#sb.corner_radius_top_right    = 6
-	#sb.corner_radius_bottom_right = 6
-	#toggle.add_theme_stylebox_override("normal", sb)
-	#toggle.add_theme_stylebox_override("hover",  sb)
-	#toggle.add_theme_font_size_override("font_size", 10)
-	#
-	## Add vào Left panel, anchor về bên phải giữa
-	#left_panel.add_child(toggle)
-	#toggle.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	#toggle.set_anchor(SIDE_LEFT, 1.0)
-	#toggle.set_anchor(SIDE_RIGHT, 1.0)
-	#toggle.set_anchor(SIDE_TOP, 0.5)
-	#toggle.set_anchor(SIDE_BOTTOM, 0.5)
-	#toggle.offset_left   = 0
-	#toggle.offset_right  = 20
-	#toggle.offset_top    = -24
-	#toggle.offset_bottom = 24
-	#toggle.z_index = 10  # nổi lên trên CenterRight
-	#toggle.pressed.connect(_toggle_hier.bind(toggle))
-#
-#func _toggle_hier(toggle: Button):
-	#left_panel.visible = not left_panel.visible
-	#toggle.text = "◀" if left_panel.visible else "▶"
+
 func _create_hier_toggle():
 	var toggle = Button.new()
 	toggle.text = "⊞"

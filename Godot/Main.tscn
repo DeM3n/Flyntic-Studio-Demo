@@ -199,6 +199,7 @@ script = ExtResource("2_cm0pq")
 
 [node name="HelpPopup" type="PopupMenu" parent="Root/TopBar/H/Menus/M8" unique_id=1168525309]
 oversampling_override = 1.0
+visible = true
 
 [node name="Spacer" type="Control" parent="Root/TopBar/H" unique_id=1795503811]
 layout_mode = 2

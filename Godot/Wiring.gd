@@ -757,15 +757,12 @@ func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], co
 	for i in range(all_pts.size() - 1):
 		var a = all_pts[i]
 		var b = all_pts[i + 1]
+
 		var corner = Vector2(b.x, a.y)
 		cv.draw_line(a, corner, draw_col, line_w, true)
 		cv.draw_line(corner, b, draw_col, line_w, true)
-		cv.draw_circle(corner, 4.0 if not is_hovered else 5.5, draw_col.darkened(0.2))
-		# === BEND POINT TẠI GÓC ===
-		#cv.draw_circle(corner, BEND_RADIUS + (2 if is_hovered else 0), Color(0.08, 0.08, 0.10, 0.9))
-		#cv.draw_circle(corner, BEND_RADIUS, draw_col.darkened(0.25))
-		#cv.draw_arc(corner, BEND_RADIUS, 0, TAU, 18, draw_col.lightened(0.3), 2.2, true)
-		#_draw_bend_node(cv, corner, draw_col, is_hovered or is_error)
+		#cv.draw_circle(corner, 4.0 if not is_hovered else 5.5, draw_col.darkened(0.2))
+
 
 	# Endpoint dots
 	cv.draw_circle(from, 4.5 if not is_hovered else 6.0, draw_col)
@@ -857,21 +854,7 @@ func _canvas_input(event: InputEvent):
 					drag_bend = bh
 					canvas.queue_redraw()
 					return
-				# Click vào corner node → chuyển thành bend point thật và kéo ngay
-				#var corner_hit = _hit_corner_for_drag(mp)
-				#if corner_hit.size() > 0 and not wire_active:
-					#var idx = corner_hit.conn_idx
-					#var corner_pos = corner_hit.pos
-					#var insert_after = corner_hit.corner_index
-	#
-					#var bps = connections[idx].get("bend_points", [])
-					#bps.insert(insert_after, corner_pos)
-					#connections[idx]["bend_points"] = bps
-	#
-					#drag_bend = {"conn_idx": idx, "pt_idx": insert_after}
-					#canvas.queue_redraw()
-					#return
-				#
+
 
 				# Click vào hint dot → thêm bend point mới rồi kéo ngay
 				var wh = _hit_wire_hint(mp)
@@ -1033,13 +1016,6 @@ func _try_connect(from: Dictionary, to: Dictionary):
 		)
 	)
 
-	#
-	#connections.append({
-		#"from_comp": from.comp, "from_port": from.port,
-		#"to_comp":   to.comp,   "to_port":   to.port,
-		#"valid": ok,
-		#"bend_points": [],
-	#})
 	var new_conn = {
 		"from_comp": from.comp, 
 		"from_port": from.port,
@@ -1058,6 +1034,8 @@ func _try_connect(from: Dictionary, to: Dictionary):
 		new_conn.bend_points = [corner]
 
 	connections.append(new_conn)
+	print("bend_points sau khi connect: ", new_conn.bend_points)  # ← thêm dòng này
+
 	if not ok:
 
 		persistent_error = {
