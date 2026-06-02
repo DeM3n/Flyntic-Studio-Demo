@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://c8x4j5m3k3p6"]
 
 [ext_resource type="Script" uid="uid://c1ndok6tnlbca" path="res://Main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://cyry3cj88i1we" path="res://m_8.gd" id="2_cm0pq"]
 [ext_resource type="Script" uid="uid://b2c633c88u7wr" path="res://tutorial_overlay.gd" id="2_uu6xs"]
 [ext_resource type="Shader" uid="uid://cihs6j4ireknf" path="res://Highlight.gdshader" id="3_r0du0"]
 
@@ -189,16 +190,15 @@ theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 12
 text = "Window"
 
-[node name="M8" type="Button" parent="Root/TopBar/H/Menus" unique_id=758809879]
+[node name="M8" type="Button" parent="Root/TopBar/H/Menus" unique_id=1126596007]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 12
 text = "Help"
+script = ExtResource("2_cm0pq")
 
-[node name="M9" type="Button" parent="Root/TopBar/H/Menus" unique_id=1277112993]
-visible = false
-layout_mode = 2
-text = "Help"
+[node name="HelpPopup" type="PopupMenu" parent="Root/TopBar/H/Menus/M8" unique_id=1168525309]
+oversampling_override = 1.0
 
 [node name="Spacer" type="Control" parent="Root/TopBar/H" unique_id=1795503811]
 layout_mode = 2
@@ -877,6 +877,4 @@ layout_mode = 2
 size_flags_vertical = 8
 text = "Next"
 
-[connection signal="pressed" from="Root/TopBar/H/Menus/M8" to="Root/TutorialOverlay" method="_on_m_8_pressed"]
-[connection signal="pressed" from="Root/TopBar/H/Menus/M9" to="Root/TutorialOverlay" method="_on_m_8_pressed"]
 [connection signal="pressed" from="Root/TutorialOverlay/MessagePanel/NextButton" to="Root/TutorialOverlay" method="_on_next_button_pressed"]

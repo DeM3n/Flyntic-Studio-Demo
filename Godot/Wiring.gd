@@ -136,7 +136,8 @@ const BEND_RADIUS := 7.0
 var drag_bend: Dictionary = {}   # {conn_idx, pt_idx}
 var hovered_wire: int = -1   
 var _pending_delete_wire: int = -1
-
+# Thay vì dùng wire_tip_timer cho lỗi
+var persistent_error: Dictionary = {}  # { text: String, screen_pos: Vector2, conn_idx: int }
 # ─────────────────────────────── INIT ─────────────────────────────
 func _ready():
 	name = "Wiring"
@@ -418,15 +419,36 @@ func _draw_canvas():
 		_draw_rotation_toolbar(sel)
 
 	# Tooltip
-	if wire_tip_text != "" and wire_tip_timer > 0:
-		var tp_w = max(len(wire_tip_text) * 7.5 + 20, 130.0)
-		var tp_rect = Rect2(wire_tip_pos + Vector2(14, -36), Vector2(tp_w, 26))
-		cv.draw_rect(tp_rect, Color(0.12, 0.08, 0.08, 0.96), true)
-		cv.draw_rect(tp_rect, Color(0.88, 0.22, 0.22, 0.9), false, 1.5)
-		cv.draw_string(ThemeDB.fallback_font, wire_tip_pos + Vector2(22, -18),
+	#if wire_tip_text != "" and wire_tip_timer > 0:
+		#var tp_w = max(len(wire_tip_text) * 7.5 + 20, 130.0)
+		#var tp_rect = Rect2(wire_tip_pos + Vector2(14, -36), Vector2(tp_w, 26))
+		#cv.draw_rect(tp_rect, Color(0.12, 0.08, 0.08, 0.96), true)
+		#cv.draw_rect(tp_rect, Color(0.88, 0.22, 0.22, 0.9), false, 1.5)
+		#cv.draw_string(ThemeDB.fallback_font, wire_tip_pos + Vector2(22, -18),
+			#wire_tip_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.65, 0.65))
+	# Tooltip
+	if persistent_error.size() > 0:
+		var msg = persistent_error.text
+		var pos = persistent_error.screen_pos
+		var tp_w = max(len(msg) * 8.0 + 30, 160.0)
+		var tp_rect = Rect2(pos + Vector2(14, -42), Vector2(tp_w, 32))
+	
+		cv.draw_rect(tp_rect, Color(0.18, 0.06, 0.06, 0.97), true)
+		cv.draw_rect(tp_rect, Color(0.95, 0.25, 0.25, 0.95), false, 2.0)
+		cv.draw_string(ThemeDB.fallback_font, pos + Vector2(22, -20),
+		msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.7, 0.7))
+	else:
+	# Tooltip bình thường (nếu có)
+		if wire_tip_text != "" and wire_tip_timer > 0:
+			# ... code tooltip cũ của bạn giữ nguyên
+			var tp_w = max(len(wire_tip_text) * 7.5 + 20, 130.0)
+			var tp_rect = Rect2(wire_tip_pos + Vector2(14, -36), Vector2(tp_w, 26))
+			cv.draw_rect(tp_rect, Color(0.12, 0.08, 0.08, 0.96), true)
+			cv.draw_rect(tp_rect, Color(0.88, 0.22, 0.22, 0.9), false, 1.5)
+			cv.draw_string(ThemeDB.fallback_font, wire_tip_pos + Vector2(22, -18),
 			wire_tip_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.65, 0.65))
-
 	# Zoom indicator (bottom-right, fades out)
+	
 	_draw_zoom_indicator()
 
 # ── Rotation toolbar ───────────────────────────────────────────────
@@ -703,8 +725,16 @@ func _draw_port_local_circle(cv: Control, r: float, port: Dictionary):
 func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], conn_idx: int = -1):
 	var cv = canvas
 	var is_hovered = (conn_idx >= 0 and conn_idx == hovered_wire)
+	# === KIỂM TRA DÂY LỖI ===
+	var is_error = false
+	if conn_idx >= 0 and conn_idx < connections.size():
+		is_error = not connections[conn_idx].get("valid", true)
 	var draw_col = col.lightened(0.25) if is_hovered else col
 	var line_w   = 4.5 if is_hovered else 2.2
+
+	if is_error:
+		draw_col = Color(0.55, 0.0, 0.0)    # Màu đỏ cho dây lỗi
+		line_w = 3.8
 
 	# Gom tất cả điểm: from → bends → to
 	# Gom tất cả điểm
@@ -731,6 +761,11 @@ func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], co
 		cv.draw_line(a, corner, draw_col, line_w, true)
 		cv.draw_line(corner, b, draw_col, line_w, true)
 		cv.draw_circle(corner, 4.0 if not is_hovered else 5.5, draw_col.darkened(0.2))
+		# === BEND POINT TẠI GÓC ===
+		#cv.draw_circle(corner, BEND_RADIUS + (2 if is_hovered else 0), Color(0.08, 0.08, 0.10, 0.9))
+		#cv.draw_circle(corner, BEND_RADIUS, draw_col.darkened(0.25))
+		#cv.draw_arc(corner, BEND_RADIUS, 0, TAU, 18, draw_col.lightened(0.3), 2.2, true)
+		#_draw_bend_node(cv, corner, draw_col, is_hovered or is_error)
 
 	# Endpoint dots
 	cv.draw_circle(from, 4.5 if not is_hovered else 6.0, draw_col)
@@ -742,6 +777,7 @@ func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], co
 			cv.draw_circle(bp, BEND_RADIUS + 2, Color(0.08, 0.08, 0.10, 0.85))
 			cv.draw_circle(bp, BEND_RADIUS, col.darkened(0.3))
 			cv.draw_arc(bp, BEND_RADIUS, 0, TAU, 18, draw_col.lightened(0.2), 2.0, true)
+			#_draw_bend_node(cv, bp, draw_col, true, true)
 
 		# Hint dots
 		if bend_pts.size() == 0 and not is_hovered:
@@ -766,39 +802,49 @@ func _canvas_input(event: InputEvent):
 			_apply_zoom(zoom_level * (1.0 - ZOOM_STEP), mp)
 			return
 
-		if event.button_index == MOUSE_BUTTON_MIDDLE:
-			panning = event.pressed
-			pan_start = mp - pan_offset
-			return
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			if event.pressed:
+				# 1. Kiểm tra các hit trước (ưu tiên cao)
+				var bh = _hit_bend_point(mp)
+				if bh.size() > 0:
+					var bps = connections[bh.conn_idx]["bend_points"]
+					bps.remove_at(bh.pt_idx)
+					connections[bh.conn_idx]["bend_points"] = bps
+					canvas.queue_redraw()
+					return
 
-		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			var bh = _hit_bend_point(mp)
-			if bh.size() > 0:
-				var bps = connections[bh.conn_idx]["bend_points"]
-				bps.remove_at(bh.pt_idx)
-				connections[bh.conn_idx]["bend_points"] = bps
-				canvas.queue_redraw()
+				var wi = _hit_wire(mp)
+				if wi >= 0:
+					hovered_wire = wi
+					canvas.queue_redraw()
+					_show_wire_context_menu(wi, mp)
+					return
+
+				var comp = _hit_component(mp)
+				if comp.size() > 0:
+					ctx_uid = comp.uid
+					for c in canvas_components: c.selected = false
+					comp.selected = true
+					selected_uid = comp.uid
+					canvas.queue_redraw()
+					
+					ctx_menu.position = Vector2i(
+						int(canvas.global_position.x + mp.x),
+						int(canvas.global_position.y + mp.y)
+					)
+					ctx_menu.popup()
+					return
+
+				# 2. Nếu không hit gì → bắt đầu Pan
+				panning = true
+				pan_start = mp - pan_offset
 				return
-			# Right-click vào wire → hiện menu xoá wire
-			var wi = _hit_wire(mp)
-			if wi >= 0:
-				hovered_wire = wi
-				canvas.queue_redraw()
-				_show_wire_context_menu(wi, mp)
+
+			else:  # RIGHT button released
+				if panning:
+					panning = false
+					canvas.queue_redraw()
 				return
-			var comp = _hit_component(mp)
-			if comp.size() > 0:
-				ctx_uid = comp.uid
-				for c in canvas_components: c.selected = false
-				comp.selected = true
-				selected_uid  = comp.uid
-				canvas.queue_redraw()
-				ctx_menu.position = Vector2i(
-					int(canvas.global_position.x + mp.x),
-					int(canvas.global_position.y + mp.y)
-				)
-				ctx_menu.popup()
-			return
 
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
@@ -811,6 +857,21 @@ func _canvas_input(event: InputEvent):
 					drag_bend = bh
 					canvas.queue_redraw()
 					return
+				# Click vào corner node → chuyển thành bend point thật và kéo ngay
+				#var corner_hit = _hit_corner_for_drag(mp)
+				#if corner_hit.size() > 0 and not wire_active:
+					#var idx = corner_hit.conn_idx
+					#var corner_pos = corner_hit.pos
+					#var insert_after = corner_hit.corner_index
+	#
+					#var bps = connections[idx].get("bend_points", [])
+					#bps.insert(insert_after, corner_pos)
+					#connections[idx]["bend_points"] = bps
+	#
+					#drag_bend = {"conn_idx": idx, "pt_idx": insert_after}
+					#canvas.queue_redraw()
+					#return
+				#
 
 				# Click vào hint dot → thêm bend point mới rồi kéo ngay
 				var wh = _hit_wire_hint(mp)
@@ -900,6 +961,13 @@ func _process(delta: float):
 	if _zoom_display_timer > 0:
 		_zoom_display_timer -= delta
 		canvas.queue_redraw()
+	# Auto cleanup persistent error nếu connection không còn tồn tại
+	if persistent_error.size() > 0:
+		var idx = persistent_error.conn_idx
+		if idx < 0 or idx >= connections.size():
+			persistent_error.clear()
+		elif not connections[idx].get("valid", true):  # optional
+			pass
 
 # ─────────────────────────────── ZOOM ─────────────────────────────
 func _apply_zoom(new_zoom: float, pivot_screen: Vector2):
@@ -965,17 +1033,46 @@ func _try_connect(from: Dictionary, to: Dictionary):
 		)
 	)
 
-	connections.append({
-		"from_comp": from.comp, "from_port": from.port,
-		"to_comp":   to.comp,   "to_port":   to.port,
+	#
+	#connections.append({
+		#"from_comp": from.comp, "from_port": from.port,
+		#"to_comp":   to.comp,   "to_port":   to.port,
+		#"valid": ok,
+		#"bend_points": [],
+	#})
+	var new_conn = {
+		"from_comp": from.comp, 
+		"from_port": from.port,
+		"to_comp": to.comp, 
+		"to_port": to.port,
 		"valid": ok,
 		"bend_points": [],
-	})
+	}
 
+	# === TẠO BEND POINT TẠI GÓC ORTHOGONAL TỰ ĐỘNG ===
+	var fp = _port_world_pos(from.comp, from.port)
+	var tp = _port_world_pos(to.comp, to.port)
+	
+	if abs(fp.x - tp.x) > 5 and abs(fp.y - tp.y) > 5:
+		var corner = Vector2(tp.x, fp.y)   # Default: ngang trước, dọc sau
+		new_conn.bend_points = [corner]
+
+	connections.append(new_conn)
 	if not ok:
-		_show_tip("⚠ Incompatible: " + ft + " ↔ " + tt, _world_to_screen(from.pos))
+
+		persistent_error = {
+			"text": "⚠ Incompatible: " + ft + " ↔ " + tt,
+			"screen_pos": _world_to_screen(from.pos),
+			"conn_idx": connections.size() - 1
+			
+		}
 	else:
-		wire_tip_text = ""
+		persistent_error.clear()
+	#if not ok:
+		#_show_tip("⚠ Incompatible: " + ft + " ↔ " + tt, _world_to_screen(from.pos))
+	#else:
+		#wire_tip_text = ""
+
 
 	canvas.queue_redraw()
 
@@ -983,6 +1080,14 @@ func _delete_component(uid: int):
 	canvas_components = canvas_components.filter(func(c): return c.uid != uid)
 	connections = connections.filter(func(c):
 		return c.from_comp.uid != uid and c.to_comp.uid != uid)
+	# === PHẦN MỚI: Xóa persistent_error nếu nó liên quan đến component vừa xóa ===
+	if persistent_error.size() > 0:
+		var err_idx = persistent_error.conn_idx
+		# Nếu conn_idx không còn hợp lệ hoặc component đã bị xóa
+		if err_idx >= connections.size() or \
+		   (connections.size() > err_idx and \
+			(connections[err_idx].from_comp.uid == uid or connections[err_idx].to_comp.uid == uid)):
+			persistent_error.clear()
 	if selected_uid == uid: selected_uid = -1
 	canvas.queue_redraw()
 
@@ -1267,9 +1372,62 @@ func _show_wire_context_menu(conn_idx: int, mp: Vector2):
 	)
 	wire_ctx_menu.popup()
 
+#func _on_wire_ctx_menu(id: int):
+	#if id == 0 and hovered_wire >= 0 and hovered_wire < connections.size():
+		#connections.remove_at(hovered_wire)
+	#_pending_delete_wire = -1
+	#hovered_wire = -1
+	#canvas.queue_redraw()
 func _on_wire_ctx_menu(id: int):
 	if id == 0 and hovered_wire >= 0 and hovered_wire < connections.size():
+		# Xóa persistent error nếu dây đang bị lỗi
+		if persistent_error.size() > 0 and persistent_error.conn_idx == hovered_wire:
+			persistent_error.clear()
+		
+		# Xóa dây
 		connections.remove_at(hovered_wire)
-	_pending_delete_wire = -1
-	hovered_wire = -1
-	canvas.queue_redraw()
+		hovered_wire = -1
+		_pending_delete_wire = -1
+		canvas.queue_redraw()
+
+# Vẽ node bend / corner đẹp và đồng nhất
+#func _draw_bend_node(cv: Control, pos: Vector2, col: Color, bigger: bool = false, is_real_bend: bool = false):
+	#var radius = BEND_RADIUS if (bigger or is_real_bend) else 6.5
+	#
+	## Nền
+	#cv.draw_circle(pos, radius + 2.5, Color(0.08, 0.08, 0.11, 0.95))
+	## Node chính
+	#cv.draw_circle(pos, radius, col.lightened(0.15))
+	## Viền sáng
+	#cv.draw_arc(pos, radius, 0, TAU, 22, Color(1.0, 0.75, 0.45), 2.8, true)
+	#
+	#if bigger or is_real_bend:
+		#cv.draw_circle(pos, radius + 4.5, Color(1.0, 0.85, 0.6, 0.25))
+#
+#
+## Hit test cho corner (để click chuyển thành bend point)
+## Hit test corner để kéo trực tiếp (không insert trước)
+#func _hit_corner_for_drag(mp: Vector2) -> Dictionary:
+	#var wmp = _screen_to_world(mp)
+	#var threshold = (BEND_RADIUS + 8.0) / zoom_level
+	#
+	#for i in range(connections.size()):
+		#var conn = connections[i]
+		#var fp = _port_world_pos(conn.from_comp, conn.from_port)
+		#var tp = _port_world_pos(conn.to_comp, conn.to_port)
+		#var bps = conn.get("bend_points", [])
+		#
+		#var pts = [fp] + bps + [tp]
+		#
+		#for s in range(pts.size() - 1):
+			#var a = pts[s]
+			#var b = pts[s + 1]
+			#var corner = Vector2(b.x, a.y)
+			#
+			#if wmp.distance_to(corner) <= threshold:
+				#return {
+					#"conn_idx": i,
+					#"corner_index": s,     # vị trí giữa 2 điểm
+					#"pos": corner
+				#}
+	#return {}
