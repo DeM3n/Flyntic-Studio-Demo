@@ -154,7 +154,7 @@ theme_override_constants/separation = 20
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="M1" type="Label" parent="Root/TopBar/H/Menus" unique_id=1897432531]
+[node name="M1" type="MenuButton" parent="Root/TopBar/H/Menus" unique_id=1307100244]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 12
@@ -199,7 +199,6 @@ script = ExtResource("2_cm0pq")
 
 [node name="HelpPopup" type="PopupMenu" parent="Root/TopBar/H/Menus/M8" unique_id=1168525309]
 oversampling_override = 1.0
-visible = true
 
 [node name="Spacer" type="Control" parent="Root/TopBar/H" unique_id=1795503811]
 layout_mode = 2

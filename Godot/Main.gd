@@ -215,7 +215,7 @@ func _ready():
 	tabs.add_child(w2d)
 	wiring_panel = w2d
 	_create_hier_toggle()
-	
+	_setup_file_buttons()
 	_log("Flyntic Studio initialized", "success")
 
 
@@ -1064,11 +1064,13 @@ func _ghost_tint(c: Color):
 # ──────────────────────────── PLACE & WIRE ────────────────────────
 var drone_root: Node3D = null
 
-func _place(id: String, pos: Vector3, port_name: String = "", parent_uid: int = -1):
+func _place(id: String, pos: Vector3, port_name: String = "", parent_uid: int = -1,force_uid: int = -1):
 	var node = _build_mesh(id, false)
 	#node.global_position = pos
 	
-	var uid = Time.get_ticks_msec() # Unique ID
+	#var uid = Time.get_ticks_msec() # Unique ID
+	var uid = force_uid if force_uid != -1 else Time.get_ticks_msec()  # dùng uid cũ nếu có
+
 	var cdata = COMPONENTS[id]
 	var entry := {
 		"uid": uid, "id": id, "type": cdata.type,
@@ -2572,3 +2574,158 @@ func _create_hier_toggle():
 func _toggle_hier(toggle: Button):
 	left_panel.visible = not left_panel.visible
 	toggle.text = "⊞" if not left_panel.visible else "⊟"
+
+# ─────────────────────────────── SAVE / LOAD ──────────────────────
+func _setup_file_buttons():
+	var menu_btn = get_node("Root/TopBar/H/Menus/M1")
+	menu_btn.text = "File"
+	
+	
+	var popup = menu_btn.get_popup()
+	popup.add_theme_font_size_override("font_size", 12)
+	popup.add_item("New",  0)
+	popup.add_item("Open", 1)
+	popup.add_item("Save", 2)
+	
+	popup.id_pressed.connect(func(id: int):
+		match id:
+			0: _on_new()
+			1: _on_open()
+			2: _on_save()
+	)
+
+func _on_new():
+	_clear_all()
+	_place("PVC Pipe Frame", Vector3.ZERO)
+	_update_all()
+	_log("New project", "success")
+
+func _on_save():
+	var dialog = FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	dialog.filters   = ["*.flyntic ; Flyntic Project"]
+	dialog.access    = FileDialog.ACCESS_FILESYSTEM
+	dialog.min_size  = Vector2i(640, 420)
+	add_child(dialog)
+	dialog.popup_centered()
+	dialog.file_selected.connect(func(path: String):
+		_write_project(path)
+		dialog.queue_free()
+	)
+	dialog.canceled.connect(func(): dialog.queue_free())
+
+func _on_open():
+	var dialog = FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dialog.filters   = ["*.flyntic ; Flyntic Project"]
+	dialog.access    = FileDialog.ACCESS_FILESYSTEM
+	dialog.min_size  = Vector2i(640, 420)
+	add_child(dialog)
+	dialog.popup_centered()
+	dialog.file_selected.connect(func(path: String):
+		_read_project(path)
+		dialog.queue_free()
+	)
+	dialog.canceled.connect(func(): dialog.queue_free())
+
+func _write_project(path: String):
+	var data := {
+		"version":   1,
+		"canvas_3d": _serialize_3d(),
+		"wiring_2d": wiring_panel.serialize() if wiring_panel else {},
+		"blocks":    _serialize_blocks(),
+	}
+	var file = FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		_log("Save failed", "error")
+		return
+	file.store_string(JSON.stringify(data, "\t"))
+	file.close()
+	_log("Saved: " + path.get_file(), "success")
+
+func _read_project(path: String):
+	var file = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_log("Open failed", "error")
+		return
+	var json = JSON.new()
+	if json.parse(file.get_as_text()) != OK:
+		_log("Parse error: " + json.get_error_message(), "error")
+		file.close()
+		return
+	file.close()
+	_clear_all()
+	var data = json.data
+	if data.has("canvas_3d"):    _deserialize_3d(data.canvas_3d)
+	if data.has("wiring_2d") and wiring_panel:
+		wiring_panel.deserialize(data.wiring_2d)
+	if data.has("blocks"):       _deserialize_blocks(data.blocks)
+	_update_all()
+	_log("Opened: " + path.get_file(), "success")
+
+# ── Serialize ──────────────────────────────────────────────────────
+func _serialize_3d() -> Dictionary:
+	var out := []
+	for p in placed:
+		out.append({
+			"uid":       p.uid,
+			"id":        p.id,
+			"port_name": p.port_name,
+			"parent_id": p.parent_id,
+			"pos":       [p.node.global_position.x, p.node.global_position.y, p.node.global_position.z],
+		})
+	return {"placed": out}
+
+func _serialize_blocks() -> Dictionary:
+	var blocks := []
+	for child in workspace.get_children():
+		if not "block_type" in child:
+			continue
+		blocks.append({
+			"type":  child.block_type,
+			"label": child.label.text if child.has_node("L") else "",
+			"value": child.value,
+			"pos":   [child.position.x, child.position.y],
+		})
+	return {"blocks": blocks}
+
+# ── Deserialize ────────────────────────────────────────────────────
+func _deserialize_3d(data: Dictionary):
+	var items = data.get("placed", [])
+	# Sort: Frame (parent_id == -1) trước, component con sau
+	items.sort_custom(func(a, b): return a.get("parent_id", -1) < b.get("parent_id", -1))
+	for p in items:
+		var pos = Vector3(p.pos[0], p.pos[1], p.pos[2])
+		_place(p.id, pos, p.get("port_name", ""), p.get("parent_id", -1), p.get("uid", -1))
+
+func _deserialize_blocks(data: Dictionary):
+	for child in workspace.get_children():
+		if "block_type" in child:
+			child.queue_free()
+	for b in data.get("blocks", []):
+		var col = Color(0.85, 0.65, 0.0)
+		# Tìm màu đúng từ BLOCK_CATEGORIES
+		for cat in BLOCK_CATEGORIES.values():
+			for bdef in cat.blocks:
+				if bdef.type == b.type:
+					col = bdef.color
+		_create_block(b.type, b.label, col, Vector2(b.pos[0], b.pos[1]))
+
+# ── Clear all ──────────────────────────────────────────────────────
+func _clear_all():
+	for p in placed:
+		if is_instance_valid(p.get("node")):
+			p.node.queue_free()
+	placed.clear()
+	if drone_root != null:
+		drone_root.queue_free()
+		drone_root = null
+	if wiring_panel != null:
+		wiring_panel.canvas_components.clear()
+		wiring_panel.connections.clear()
+		if wiring_panel.canvas:
+			wiring_panel.canvas.queue_redraw()
+	for child in workspace.get_children():
+		if "block_type" in child:
+			child.queue_free()
+	_build_hierarchy_tree()

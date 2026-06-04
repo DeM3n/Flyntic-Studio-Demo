@@ -5,6 +5,7 @@ var _popup_open := false
 var _just_closed := false
 
 func _ready():
+	popup.add_theme_font_size_override("font_size", 12)
 	popup.popup_hide.connect(_on_popup_hide)
 	pressed.connect(_on_button_pressed)
 	

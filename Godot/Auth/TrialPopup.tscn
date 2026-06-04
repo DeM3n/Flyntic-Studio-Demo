@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://wv5gef207fh0"]
+
+[ext_resource type="Script" uid="uid://cvrpm3ae2a43u" path="res://Auth/TrialPopup.gd" id="1_sg2qc"]
+
+[node name="TrialPopup" type="Control" unique_id=1271682096]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1_sg2qc")

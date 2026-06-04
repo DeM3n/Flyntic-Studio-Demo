@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://i4wk6ffe0smq"]
+
+[ext_resource type="Script" uid="uid://n4tgiwdtxve4" path="res://Auth/LoginScreen.gd" id="1_5i2qs"]
+
+[node name="Login" type="Control" unique_id=815896501]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1_5i2qs")

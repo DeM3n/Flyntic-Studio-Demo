@@ -983,7 +983,7 @@ func _handle_toolbar_click(mp: Vector2):
 func _rotate_component(uid: int, delta_deg: int):
 	for comp in canvas_components:
 		if comp.uid == uid:
-			comp["rotation_deg"] = (comp.get("rotation_deg", 0) + delta_deg + 360) % 360
+			comp["rotation_deg"] = (int(comp.get("rotation_deg", 0) + delta_deg + 360) % 360)
 			canvas.queue_redraw()
 			return
 
@@ -1323,7 +1323,7 @@ func _port_label_offset_world(comp: Dictionary, port: Dictionary, big: bool) -> 
 	# Xoay side theo rotation
 	const SIDES = ["top", "right", "bottom", "left"]
 	var idx   = SIDES.find(side)
-	var steps = (rot / 90) % 4
+	var steps = (int(rot / 90)) % 4
 	var real_side = side
 	if idx >= 0:
 		real_side = SIDES[(idx + steps + 4) % 4]
@@ -1368,44 +1368,85 @@ func _on_wire_ctx_menu(id: int):
 		_pending_delete_wire = -1
 		canvas.queue_redraw()
 
-# Vẽ node bend / corner đẹp và đồng nhất
-#func _draw_bend_node(cv: Control, pos: Vector2, col: Color, bigger: bool = false, is_real_bend: bool = false):
-	#var radius = BEND_RADIUS if (bigger or is_real_bend) else 6.5
-	#
-	## Nền
-	#cv.draw_circle(pos, radius + 2.5, Color(0.08, 0.08, 0.11, 0.95))
-	## Node chính
-	#cv.draw_circle(pos, radius, col.lightened(0.15))
-	## Viền sáng
-	#cv.draw_arc(pos, radius, 0, TAU, 22, Color(1.0, 0.75, 0.45), 2.8, true)
-	#
-	#if bigger or is_real_bend:
-		#cv.draw_circle(pos, radius + 4.5, Color(1.0, 0.85, 0.6, 0.25))
-#
-#
-## Hit test cho corner (để click chuyển thành bend point)
-## Hit test corner để kéo trực tiếp (không insert trước)
-#func _hit_corner_for_drag(mp: Vector2) -> Dictionary:
-	#var wmp = _screen_to_world(mp)
-	#var threshold = (BEND_RADIUS + 8.0) / zoom_level
-	#
-	#for i in range(connections.size()):
-		#var conn = connections[i]
-		#var fp = _port_world_pos(conn.from_comp, conn.from_port)
-		#var tp = _port_world_pos(conn.to_comp, conn.to_port)
-		#var bps = conn.get("bend_points", [])
-		#
-		#var pts = [fp] + bps + [tp]
-		#
-		#for s in range(pts.size() - 1):
-			#var a = pts[s]
-			#var b = pts[s + 1]
-			#var corner = Vector2(b.x, a.y)
-			#
-			#if wmp.distance_to(corner) <= threshold:
-				#return {
-					#"conn_idx": i,
-					#"corner_index": s,     # vị trí giữa 2 điểm
-					#"pos": corner
-				#}
-	#return {}
+# ─────────────────────────────── SAVE / LOAD API ──────────────────
+func serialize() -> Dictionary:
+	var comps := []
+	for c in canvas_components:
+		comps.append({
+			"uid":          c.uid,
+			"name":         c.name,
+			"pos":          [c.pos.x, c.pos.y],
+			"rotation_deg": c.get("rotation_deg", 0),
+		})
+	var conns := []
+	for conn in connections:
+		var bps := []
+		for bp in conn.get("bend_points", []):
+			bps.append([bp.x, bp.y])
+		conns.append({
+			"from_uid":    conn.from_comp.uid,
+			"from_port":   conn.from_port.name,
+			"to_uid":      conn.to_comp.uid,
+			"to_port":     conn.to_port.name,
+			"valid":       conn.get("valid", true),
+			"bend_points": bps,
+		})
+	return {"components": comps, "connections": conns}
+
+func deserialize(data: Dictionary):
+	# Clear
+	canvas_components.clear()
+	connections.clear()
+	persistent_error.clear()
+	uid_counter = 0
+
+	# Restore components
+	for c in data.get("components", []):
+		var cdef = COMP_DEFS.get(c.name, {})
+		if cdef.is_empty():
+			continue
+		uid_counter = max(uid_counter, int(c.uid))
+		canvas_components.append({
+			"uid":          int(c.uid),
+			"name":         c.name,
+			"pos":          Vector2(c.pos[0], c.pos[1]),
+			"size":         cdef.size,
+			"color":        cdef.color,
+			"shape":        cdef.get("shape", "rect"),
+			"ports":        cdef.ports.duplicate(true),
+			"selected":     false,
+			"rotation_deg": c.get("rotation_deg", 0),
+		})
+
+	# Build uid → comp map
+	var uid_map := {}
+	for c in canvas_components:
+		uid_map[c.uid] = c
+
+	# Restore connections
+	for conn in data.get("connections", []):
+		var fc = uid_map.get(int(conn.from_uid))
+		var tc = uid_map.get(int(conn.to_uid))
+		if fc == null or tc == null:
+			continue
+		var fp = _find_port_by_name(fc, conn.from_port)
+		var tp = _find_port_by_name(tc, conn.to_port)
+		if fp.is_empty() or tp.is_empty():
+			continue
+		var bps: Array[Vector2] = []
+		for bp in conn.get("bend_points", []):
+			bps.append(Vector2(bp[0], bp[1]))
+		connections.append({
+			"from_comp":   fc, "from_port": fp,
+			"to_comp":     tc, "to_port":   tp,
+			"valid":       conn.get("valid", true),
+			"bend_points": bps,
+		})
+
+	canvas.queue_redraw()
+
+func _find_port_by_name(comp: Dictionary, port_name: String) -> Dictionary:
+	for p in comp.ports:
+		if p.name == port_name:
+			return p
+	return {}

@@ -15,11 +15,15 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Flyntic Studio"
-run/main_scene="res://Main.tscn"
+run/main_scene="uid://i4wk6ffe0smq"
 config/features=PackedStringArray("4.6", "Forward Plus")
 "#config/iconremoved-notneeded[display]window/size/viewport_width"=1600
 window/size/viewport_height=900
 window/stretch/mode="canvas_items"
+
+[autoload]
+
+AuthManager="*uid://ktwumacpjx2v"
 
 [dotnet]
 
