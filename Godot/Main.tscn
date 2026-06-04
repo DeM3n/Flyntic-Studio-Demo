@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://c1ndok6tnlbca" path="res://Main.gd" id="1_main"]
 [ext_resource type="Script" uid="uid://cyry3cj88i1we" path="res://m_8.gd" id="2_cm0pq"]
+[ext_resource type="Script" uid="uid://lg1j88inmrl3" path="res://User/UserMenu.gd" id="2_fos0i"]
 [ext_resource type="Script" uid="uid://b2c633c88u7wr" path="res://tutorial_overlay.gd" id="2_uu6xs"]
 [ext_resource type="Shader" uid="uid://cihs6j4ireknf" path="res://Highlight.gdshader" id="3_r0du0"]
 
@@ -140,6 +141,7 @@ grow_horizontal = 2
 grow_vertical = 2
 rotation = 2.5842412e-05
 theme_override_constants/separation = 10
+script = ExtResource("2_fos0i")
 
 [node name="Title" type="Label" parent="Root/TopBar/H" unique_id=1470047877]
 layout_mode = 2

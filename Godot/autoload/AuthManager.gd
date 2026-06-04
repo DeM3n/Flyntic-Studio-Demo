@@ -48,13 +48,15 @@ func logout():
 	user_name     = ""
 	if FileAccess.file_exists(SESSION_PATH):
 		DirAccess.remove_absolute(SESSION_PATH)
-	get_tree().change_scene_to_file("res://scenes/LoginScreen.tscn")
+	get_tree().change_scene_to_file("res://Auth/Login.tscn")
 
 # ── Login ──────────────────────────────────────────────────────────
 func login(email: String, password: String):
 	var http = HTTPRequest.new()
 	add_child(http)
-	http.request_completed.connect(_on_login_done)
+	http.request_completed.connect(_on_login_done, CONNECT_ONE_SHOT)
+	http.request_completed.connect(func(_r,_c,_h,_b): http.queue_free(), CONNECT_ONE_SHOT)
+
 	http.request(
 		SUPABASE_URL + "/functions/v1/login",
 		["Content-Type: application/json"],
@@ -63,10 +65,13 @@ func login(email: String, password: String):
 	)
 
 func _on_login_done(_result, _code, _headers, body):
-	print("HTTP code: ", _code)
-	print("Body: ", body.get_string_from_utf8())
+	#print("HTTP code: ", _code)
+	#print("Body: ", body.get_string_from_utf8())
+	print("=== _on_login_done called")
 
 	var data = JSON.parse_string(body.get_string_from_utf8())
+	print("=== parsed data: ", data)
+	print("=== success field: ", data.get("success", "KEY NOT FOUND") if data else "data is NULL")
 	if data == null or not data.get("success", false):
 		emit_signal("login_failed", data.get("reason", "Login failed"))
 		return
@@ -81,7 +86,8 @@ func _on_login_done(_result, _code, _headers, body):
 func check_license():
 	var http = HTTPRequest.new()
 	add_child(http)
-	http.request_completed.connect(_on_license_done)
+	http.request_completed.connect(_on_license_done, CONNECT_ONE_SHOT)
+	http.request_completed.connect(func(_r,_c,_h,_b): http.queue_free(), CONNECT_ONE_SHOT)
 	http.request(
 		SUPABASE_URL + "/functions/v1/check-license",
 		[
@@ -92,6 +98,8 @@ func check_license():
 	)
 
 func _on_license_done(_result, code, _headers, body):
+	print("=== _on_license_done called, code: ", code)
+	print("=== body: ", body.get_string_from_utf8())
 	if code == 429:
 		emit_signal("access_denied", "Too many request please try again")
 		return
@@ -132,7 +140,8 @@ signal trial_offer(already_claimed: bool)
 func claim_trial():
 	var http = HTTPRequest.new()
 	add_child(http)
-	http.request_completed.connect(_on_claim_done)
+	http.request_completed.connect(_on_claim_done, CONNECT_ONE_SHOT)
+	http.request_completed.connect(func(_r,_c,_h,_b): http.queue_free(), CONNECT_ONE_SHOT)
 	http.request(
 		SUPABASE_URL + "/functions/v1/claim-trial",
 		[

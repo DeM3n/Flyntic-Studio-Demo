@@ -8,9 +8,10 @@ var _already_claimed := false
 func _ready():
 	_build_ui()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	AuthManager.access_granted.connect(func(type, tier, days):
-		queue_free()
-		get_tree().change_scene_to_file("res://Main.tscn")
+	AuthManager.access_granted.connect(
+		func(_tier, _tier_name, _days_left):
+			AuthManager.get_tree().change_scene_to_file("res://Main.tscn"),
+		CONNECT_ONE_SHOT
 	)
 
 func show_offer(already_claimed: bool):

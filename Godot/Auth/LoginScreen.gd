@@ -9,9 +9,9 @@ var loading_label:  Label
 
 func _ready():
 	_build_ui()
-	AuthManager.access_granted.connect(_on_granted)
-	AuthManager.access_denied.connect(_on_denied)
-	AuthManager.login_failed.connect(_on_login_failed)
+	AuthManager.access_granted.connect(_on_granted, CONNECT_ONE_SHOT)
+	AuthManager.access_denied.connect(_on_denied, CONNECT_ONE_SHOT)
+	AuthManager.login_failed.connect(_on_login_failed, CONNECT_ONE_SHOT)
 
 	if AuthManager.has_session():
 		_set_loading(true)
@@ -191,10 +191,14 @@ func _on_login_pressed():
 	AuthManager.login(email, password)
 
 func _on_granted(tier: String, tier_name: String, days_left: int):
+	print("=== GRANTED: ", tier, " / ", tier_name, " / ", days_left)
 	get_tree().change_scene_to_file("res://Main.tscn")
 	
 func _on_denied(reason: String):
+	print("=== DENIED: ", reason)
 	_set_loading(false)
+	#reconnect
+	AuthManager.access_denied.connect(_on_denied, CONNECT_ONE_SHOT)
 	match reason:
 		"no_subscription", "trial_expired":
 			var popup = preload("res://Auth/TrialPopup.tscn").instantiate()
@@ -206,8 +210,10 @@ func _on_denied(reason: String):
 			error_label.text = "Access denied"
 
 func _on_login_failed(reason: String):
+	print("=== LOGIN FAILED: ", reason)
 	_set_loading(false)
 	error_label.text = reason
+	AuthManager.login_failed.connect(_on_login_failed, CONNECT_ONE_SHOT)
 
 func _set_loading(on: bool):
 	login_btn.visible     = not on
