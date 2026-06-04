@@ -65,6 +65,7 @@ func login(email: String, password: String):
 	)
 
 func _on_login_done(_result, _code, _headers, body):
+	
 	#print("HTTP code: ", _code)
 	#print("Body: ", body.get_string_from_utf8())
 	print("=== _on_login_done called")
@@ -127,8 +128,9 @@ func _save_session_with_license(license_data: Dictionary):
 		"access_token":   access_token,
 		"refresh_token":  refresh_token,
 		"email":          user_email,
-		"license_type":   license_data.get("type", ""),
-		"license_tier":   license_data.get("tier", ""),
+		"name":           user_name, 
+		"license_type":   license_data.get("tier", ""),
+		"license_tier":   license_data.get("tier_name", ""),
 		"days_left":      license_data.get("days_left", 0),
 		"server_time":    license_data.get("server_time", ""),
 		"cached_at":      Time.get_unix_time_from_system(),
