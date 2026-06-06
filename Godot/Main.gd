@@ -49,6 +49,12 @@ extends Control
 @onready var topbar_status: Label = $Root/TopBar/H/Status
 @onready var cat_sidebar: VBoxContainer = $Root/Content/CenterRight/Center/Tabs/Blocks/MainH/Sidebar/V
 
+#Thanh tim kiem tren CompPanel
+var _search_text: String = ""
+var _active_filters: Array = []  # rỗng = hiện tất cả
+
+@onready var search_box: LineEdit = $Root/Content/Left/CompPanel/V/SearchBox
+@onready var filter_btn: MenuButton = $Root/Content/Left/CompPanel/V/FilterButton
 # Scale factors for components
 const OBJ_SCALE := 0.01 # convert mm to Godot units
 
@@ -182,6 +188,8 @@ var trash_panel: Panel = null
 
 # ──────────────────────────── INIT ────────────────────────────────
 func _ready():
+	print($Root/Content/CenterRight/Center.get_children())
+	_setup_hud()
 	_build_comp_list()
 	_build_floor()
 	_build_grid()
@@ -216,6 +224,7 @@ func _ready():
 	wiring_panel = w2d
 	_create_hier_toggle()
 	_setup_file_buttons()
+	_setup_comp_search()
 	_log("Flyntic Studio initialized", "success")
 
 
@@ -831,17 +840,14 @@ func _input(event):
 			pivot.global_position -= cam_basis.x * event.relative.x * pan_speed
 			pivot.global_position += cam_basis.y * event.relative.y * pan_speed
 
-	if event is InputEventKey and event.pressed:
-		if not sim_locked:
-			if event.keycode == KEY_R and ghost:
-				ghost_rot += PI / 2
-			if event.keycode == KEY_ESCAPE:
-				if wiring_drag_active:  # ← THÊM
-					_cancel_wire_drag() # ← THÊM
-			if event.keycode == KEY_DELETE or event.keycode == KEY_BACKSPACE:
-				_remove_selected()
+
 
 func _process(_delta):
+	_license_check_timer += _delta
+	if _license_check_timer >= LICENSE_RECHECK_INTERVAL:
+		_license_check_timer = 0.0
+		_recheck_license()
+	_update_hud()
 	# WASD Movement support
 	var move_vec = Vector3.ZERO
 	if Input.is_key_pressed(KEY_W): move_vec += -camera.global_transform.basis.z
@@ -1929,327 +1935,6 @@ func _play_snap_sound():
 	player.queue_free()
 
 
-# =================Wiring Mode======================
-var wiring_mode := false
-var wiring_drag_from: Dictionary = {}   # {uid, port_name, port_pos, port_type}
-var wiring_drag_active := false
-var wiring_drag_pos := Vector3.ZERO
-var manual_wires: Array[Dictionary] = []  # {from_uid, from_port, to_uid, to_port, node}
-var wire_drag_mesh: Node3D = null
-var wiring_hover_port: Dictionary = {}
-var wiring_tooltip: Label = null
-
-
-func _toggle_wiring_mode():
-	wiring_mode = !wiring_mode
-	
-	if wiring_mode:
-		_cancel_ghost()
-		_log("Wiring Mode ON — Click a port to start", "info")
-		_show_all_ports()
-		# Desaturate tất cả components
-		_set_components_desaturate(true)
-	else:
-		_hide_all_ports()
-		_set_components_desaturate(false)
-		_restore_all_materials()
-		_cancel_wire_drag()
-		_log("Wiring Mode OFF", "info")
-	if is_instance_valid(wiring_overlay):
-		wiring_overlay.visible = wiring_mode
-
-func _show_all_ports():
-	_clear_children(snap_hints)
-	for comp in placed:
-		if not is_instance_valid(comp.get("node")): continue
-		var ports = COMPONENTS[comp.id].get("ports", [])
-		for port in ports:
-			var hint = MeshInstance3D.new()
-			var sphere = SphereMesh.new()
-			sphere.radius = 0.18
-			sphere.height = 0.36
-			hint.mesh = sphere
-			hint.name = port.name
-			
-			# Màu theo loại port
-			var mat = StandardMaterial3D.new()
-			var port_color = _get_port_color(port)
-			mat.albedo_color = port_color
-			mat.emission_enabled = true
-			mat.emission = port_color
-			mat.emission_energy_multiplier = 2.0
-			mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-			hint.material_override = mat
-			hint.set_meta("parent_uid", comp.uid)
-			hint.set_meta("port_data", port)
-			hint.set_meta("port_type", _get_port_type(port))
-			snap_hints.add_child(hint)
-			hint.global_position = comp.node.global_transform * port.pos
-
-func _get_port_color(port: Dictionary) -> Color:
-	var allowed = port.get("allowed", [])
-	if allowed.has("Motor") or allowed.has("Battery"):
-		return Color(0.9, 0.1, 0.1, 0.85)   # Power = Đỏ
-	elif allowed.has("FC") or allowed.has("ESC"):
-		return Color(0.9, 0.75, 0.1, 0.85)  # Signal = Vàng
-	elif allowed.has("Propeller"):
-		return Color(0.1, 0.6, 0.9, 0.85)   # Prop = Xanh dương
-	return Color(0.5, 0.5, 0.5, 0.85)       # Default = Xám
-
-func _get_port_type(port: Dictionary) -> String:
-	var allowed = port.get("allowed", [])
-	if allowed.has("Motor") or allowed.has("Battery"): return "power"
-	if allowed.has("FC") or allowed.has("ESC"): return "signal"
-	if allowed.has("Propeller"): return "prop"
-	return "generic"
-
-func _hide_all_ports():
-	_clear_children(snap_hints)
-
-func _set_components_desaturate(on: bool):
-	for comp in placed:
-		if not is_instance_valid(comp.get("node")): continue
-		_apply_desaturate_recursive(comp.node, on)
-
-
-func _apply_desaturate_recursive(node: Node, on: bool):
-	for ch in node.get_children():
-		if ch is MeshInstance3D and on:
-			# Duplicate riêng để tránh shared material bug
-			var mat = ch.material_override
-			if mat == null and ch.mesh and ch.mesh.surface_get_material(0):
-				mat = ch.mesh.surface_get_material(0)
-			if mat != null:
-				mat = mat.duplicate()
-				mat.resource_local_to_scene = true
-				ch.material_override = mat
-				if mat is StandardMaterial3D:
-					if not ch.has_meta("original_albedo"):
-						ch.set_meta("original_albedo", mat.albedo_color)
-						ch.set_meta("original_transparency", mat.transparency)
-					var gray = mat.albedo_color.lerp(Color(0.5, 0.5, 0.5), 0.6)
-					gray.a = 0.5
-					mat.albedo_color = gray
-					mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-		_apply_desaturate_recursive(ch, on)
-
-func _cancel_wire_drag():
-	wiring_drag_active = false
-	wiring_drag_from = {}
-	if is_instance_valid(wire_drag_mesh):
-		wire_drag_mesh.queue_free()
-		wire_drag_mesh = null
-		
-var wiring_overlay: Panel = null
-
-
-
-
-var ignore_next_tab_change := false
-func _on_tab_changed(tab_idx: int):
-
-	if ignore_next_tab_change:
-		ignore_next_tab_change = false
-		return
-
-	var tab_name = tabs.get_tab_title(tab_idx)
-
-	# ====================== WIRING TAB ======================
-	if tab_name == "Wiring":
-
-		ignore_next_tab_change = true
-		tabs.current_tab = 0
-
-		wiring_mode = !wiring_mode
-
-		if wiring_mode:
-			_cancel_ghost()
-			_show_all_ports()
-			_set_components_desaturate(true)
-
-			if is_instance_valid(wiring_overlay):
-				wiring_overlay.visible = true
-
-			_log("Wiring Mode ON — Click a port to connect", "info")
-
-		else:
-			_hide_all_ports()
-			_set_components_desaturate(false)
-			_restore_all_materials()
-			_cancel_wire_drag()
-
-			if is_instance_valid(wiring_overlay):
-				wiring_overlay.visible = false
-
-			_log("Wiring Mode OFF", "info")
-
-		return
-
-
-	# ====================== OTHER TABS ======================
-	if wiring_mode:
-		wiring_mode = false
-
-		_hide_all_ports()
-		_set_components_desaturate(false)
-		_restore_all_materials()
-		_cancel_wire_drag()
-
-		if is_instance_valid(wiring_overlay):
-			wiring_overlay.visible = false
-
-		_log("Wiring Mode OFF", "info")
-
-func _raycast_port() -> Dictionary:
-	var mpos = viewport.get_mouse_position()
-	var ro = camera.project_ray_origin(mpos)
-	var rd = camera.project_ray_normal(mpos)
-	var best_d := 0.4
-	var best = {}
-	for hint in snap_hints.get_children():
-		if not is_instance_valid(hint): continue
-		var to_hint = hint.global_position - ro
-		var proj = to_hint.dot(rd)
-		if proj <= 0: continue
-		var closest = ro + rd * proj
-		var dist = closest.distance_to(hint.global_position)
-		if dist < best_d:
-			best_d = dist
-			best = {
-				"uid": hint.get_meta("parent_uid", -1),
-				"port_name": hint.name,
-				"port_pos": hint.global_position,
-				"port_type": hint.get_meta("port_type", "generic"),
-				"port_data": hint.get_meta("port_data", {}),
-				"hint_node": hint
-			}
-	return best
-
-func _try_connect_wire(to_port: Dictionary):
-	# Validation
-	var from_type = wiring_drag_from.get("port_type", "")
-	var to_type = to_port.get("port_type", "")
-	
-	if wiring_drag_from.get("uid", -1) == to_port.get("uid", -1): 
-		_show_wire_error("Cannot connect to same component!")
-		_cancel_wire_drag()
-		return
-	
-	if from_type != to_type:
-		_show_wire_error("Incompatible ports! (" + from_type + " ≠ " + to_type + ")")
-		_flash_wire_red()
-		await get_tree().create_timer(0.5).timeout
-		_cancel_wire_drag()
-		return
-	
-	# Valid — tạo wire thực sự
-	_finalize_wire(wiring_drag_from, to_port)
-	_cancel_wire_drag()
-	_log("Wire connected: " + wiring_drag_from.port_name + " → " + to_port.port_name, "success")
-
-
-func _finalize_wire(from: Dictionary, to: Dictionary):
-	var wire_node = Node3D.new()
-	_draw_bezier_wire(wire_node, from.port_pos, to.port_pos, Color(0.1, 0.8, 0.3))
-	
-	if drone_root:
-		drone_root.add_child(wire_node)
-	else:
-		components_group.add_child(wire_node)  
-	manual_wires.append({
-		"from_uid": from.uid,
-		"from_port": from.port_name,
-		"to_uid": to.uid,
-		"to_port": to.port_name,
-		"node": wire_node
-	})  
-	# Pulse animation
-	_animate_wire_pulse(wire_node)
-
-
-
-func _show_wire_error(msg: String):
-	_log("WIRE ERROR: " + msg, "error")
-	# Tooltip nổi
-	if is_instance_valid(wiring_tooltip):
-		wiring_tooltip.queue_free()
-	wiring_tooltip = Label.new()
-	wiring_tooltip.text = "⚠ " + msg
-	wiring_tooltip.add_theme_font_size_override("font_size", 13)
-	wiring_tooltip.add_theme_color_override("font_color", Color(1, 0.3, 0.3))
-	add_child(wiring_tooltip)
-	wiring_tooltip.global_position = get_global_mouse_position() + Vector2(10, -30)
-	await get_tree().create_timer(1.5).timeout
-	if is_instance_valid(wiring_tooltip):
-		wiring_tooltip.queue_free()
-
-func _flash_wire_red():
-	if not is_instance_valid(wire_drag_mesh): return
-	for ch in wire_drag_mesh.get_children():
-		if ch is MeshInstance3D and ch.material_override:
-			ch.material_override.albedo_color = Color(1, 0.1, 0.1)
-
-func _draw_bezier_wire(root: Node3D, from: Vector3, to: Vector3, color: Color):
-	var dist = from.distance_to(to)
-	var segments = 10
-	var sag = max(0.15, dist * 0.2)
-	var mid = (from + to) / 2.0
-	mid.y -= sag
-	for i in range(segments):
-		var t0 = float(i) / segments
-		var t1 = float(i + 1) / segments
-		var p0 = _bezier3(from, mid, to, t0)
-		var p1 = _bezier3(from, mid, to, t1)
-		var seg_dist = p0.distance_to(p1)
-		var cyl = MeshInstance3D.new()
-		var cm = CylinderMesh.new()
-		cm.top_radius = 0.035
-		cm.bottom_radius = 0.035
-		cm.height = seg_dist
-		cyl.mesh = cm
-		var mat = StandardMaterial3D.new()
-		mat.albedo_color = color
-		mat.emission_enabled = true
-		mat.emission = color
-		mat.emission_energy_multiplier = 1.5
-		cyl.material_override = mat
-		root.add_child(cyl)
-		cyl.look_at_from_position((p0 + p1) / 2.0, p1, Vector3.UP)
-		cyl.rotate_object_local(Vector3.RIGHT, PI / 2)
-
-func _animate_wire_pulse(wire_node: Node3D):
-	# Tween emission để tạo hiệu ứng pulse
-	var tween = create_tween().set_loops()
-	for ch in wire_node.get_children():
-		if ch is MeshInstance3D and ch.material_override:
-			tween.tween_property(ch.material_override, 
-				"emission_energy_multiplier", 3.0, 0.5)
-			tween.tween_property(ch.material_override, 
-				"emission_energy_multiplier", 1.0, 0.5)
-func _create_drag_wire() -> Node3D:
-	var w = Node3D.new()
-	w.name = "DragWire"
-	scene_root.add_child(w)
-	return w
-
-func _restore_all_materials():
-	for comp in placed:
-		if not is_instance_valid(comp.get("node")): continue
-		_restore_materials_recursive(comp.node)
-
-
-func _restore_materials_recursive(node: Node):
-	for ch in node.get_children():
-		if ch is MeshInstance3D and ch.has_meta("original_albedo"):
-			var mat = ch.material_override
-			if mat is StandardMaterial3D:
-				mat.albedo_color = ch.get_meta("original_albedo")
-				mat.transparency = ch.get_meta("original_transparency")
-				mat.albedo_color.a = 1.0
-				mat.emission_enabled = false
-				ch.remove_meta("original_albedo")
-				ch.remove_meta("original_transparency")
-		_restore_materials_recursive(ch)
 
 var tree_items: Dictionary = {}   # uid -> TreeItem
 
@@ -2314,31 +1999,160 @@ func _create_hier_item(comp: Dictionary, parent_item: TreeItem) -> TreeItem:
 
 #============COMPONENT LIST===============
 var _cat_collapsed: Dictionary = {}  # track trạng thái collapsed của từng category
-
+#func _build_comp_list():
+		## Category header — thêm margin trên bằng cách prefix newline nếu không phải cat đầu tiên
+#
+	#comp_list.clear()
+	#for cat in CATEGORIES:
+		## Lọc items trong category theo search + filter
+		#var visible_items: Array = []
+		#for cid in CATEGORIES[cat]:
+			#if not COMPONENTS.has(cid):
+				#continue
+			#var c = COMPONENTS[cid]
+			## Check filter type (nếu có filter thì kiểm tra, không thì pass)
+			#if _active_filters.size() > 0:
+				#if not c.type.to_lower() in _active_filters:
+					#continue
+			## Check search text
+			#if _search_text != "" and not cid.to_lower().contains(_search_text):
+				#continue
+			#visible_items.append(cid)
+#
+		## Khi đang search/filter: bỏ qua category rỗng, không cần header collapse
+		#var is_filtering = _search_text != "" or _active_filters.size() > 0
+		#if is_filtering:
+			#if visible_items.is_empty():
+				#continue
+			## Hiện category header đơn giản, không collapse
+			#var ci = comp_list.add_item("  " + cat)
+			#comp_list.set_item_selectable(ci, false)
+			#comp_list.set_item_metadata(ci, {"is_category": true, "cat": cat})
+			#comp_list.set_item_custom_fg_color(ci, Color(0.75, 0.75, 0.75))
+		#else:
+			#var collapsed = _cat_collapsed.get(cat, false)
+			#var arrow = "▾ " if not collapsed else "▸ "
+			#var ci = comp_list.add_item(arrow + cat)
+			#comp_list.set_item_selectable(ci, true)
+			#comp_list.set_item_metadata(ci, {"is_category": true, "cat": cat})
+			#comp_list.set_item_custom_fg_color(ci, Color(0.75, 0.75, 0.75))
+			#if collapsed:
+				#continue  # bỏ qua items nếu collapsed
+#
+		#for cid in visible_items:
+			#var ii = comp_list.add_item("   " + cid)
+			#comp_list.set_item_metadata(ii, {"is_category": false, "id": cid})
+			#var c = COMPONENTS[cid]
+			#match c.type:
+				#"Motor":    comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.4, 0.4))
+				#"Battery":  comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.8, 0.2))
+				#"Frame":    comp_list.set_item_custom_fg_color(ii, Color(0.7, 0.7, 0.7))
+				#_:          comp_list.set_item_custom_fg_color(ii, Color(0.6, 0.7, 0.8))
 func _build_comp_list():
 	comp_list.clear()
+	var is_first_cat = true
 	for cat in CATEGORIES:
-		# Lấy trạng thái collapsed, mặc định là false (expanded)
-		var collapsed = _cat_collapsed.get(cat, false)
-		var arrow = "▾ " if not collapsed else "▸ "
-		
-		var ci = comp_list.add_item(arrow + cat)
-		comp_list.set_item_selectable(ci, true)
-		comp_list.set_item_metadata(ci, {"is_category": true, "cat": cat})
-		comp_list.set_item_custom_fg_color(ci, Color(0.75, 0.75, 0.75))
-		
-		# Chỉ hiện items nếu category chưa bị collapse
-		if not collapsed:
-			for cid in CATEGORIES[cat]:
-				if COMPONENTS.has(cid):
-					var ii = comp_list.add_item("   " + cid)
-					comp_list.set_item_metadata(ii, {"is_category": false, "id": cid})
-					var c = COMPONENTS[cid]
-					match c.type:
-						"Motor":    comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.4, 0.4))
-						"Battery":  comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.8, 0.2))
-						"Frame":    comp_list.set_item_custom_fg_color(ii, Color(0.7, 0.7, 0.7))
-						_:          comp_list.set_item_custom_fg_color(ii, Color(0.6, 0.7, 0.8))
+		var visible_items: Array = []
+		for cid in CATEGORIES[cat]:
+			if not COMPONENTS.has(cid):
+				continue
+			var c = COMPONENTS[cid]
+			if _active_filters.size() > 0:
+				if not c.type.to_lower() in _active_filters:
+					continue
+			if _search_text != "" and not cid.to_lower().contains(_search_text):
+				continue
+			visible_items.append(cid)
+
+		var is_filtering = _search_text != "" or _active_filters.size() > 0
+		if is_filtering and visible_items.is_empty():
+			continue
+
+		if is_filtering:
+			var ci = comp_list.add_item("  " + cat)
+			comp_list.set_item_selectable(ci, false)
+			comp_list.set_item_metadata(ci, {"is_category": true, "cat": cat})
+			comp_list.set_item_custom_fg_color(ci, Color(0.55, 0.55, 0.55))
+			
+		else:
+			var collapsed = _cat_collapsed.get(cat, false)
+			var arrow = "▾ " if not collapsed else "▸ "
+			var ci = comp_list.add_item(arrow + cat)
+			comp_list.set_item_selectable(ci, true)
+			comp_list.set_item_metadata(ci, {"is_category": true, "cat": cat})
+			comp_list.set_item_custom_fg_color(ci, Color(0.55, 0.55, 0.55))
+			if collapsed:
+				continue
+
+		for cid in visible_items:
+			var ii = comp_list.add_item("      " + cid)  # tăng indent
+			comp_list.set_item_metadata(ii, {"is_category": false, "id": cid})
+			var c = COMPONENTS[cid]
+			match c.type:
+				"Motor":    comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.4, 0.4))
+				"Battery":  comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.8, 0.2))
+				"Frame":    comp_list.set_item_custom_fg_color(ii, Color(0.7, 0.7, 0.7))
+				_:          comp_list.set_item_custom_fg_color(ii, Color(0.6, 0.7, 0.8))
+	if comp_list.item_count == 0:
+
+		var ei = comp_list.add_item("  No components found")
+		comp_list.set_item_selectable(ei, false)
+		comp_list.set_item_disabled(ei, true)
+		comp_list.set_item_custom_fg_color(ei, Color(0.5, 0.5, 0.5))
+##searching and filtering in comp_list
+func _setup_comp_search():
+	# Tạo HBox chứa search + filter
+	var hbox = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 4)
+	
+	# Tạo LineEdit
+	var sbox = LineEdit.new()
+	sbox.placeholder_text = "Search component..."
+	sbox.clear_button_enabled = true
+	sbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sbox.add_theme_font_size_override("font_size", 12) 
+	sbox.custom_minimum_size = Vector2(0, 24)  # ← thêm
+	hbox.add_child(sbox)
+	
+	# Tạo MenuButton
+	var fbtn = MenuButton.new()
+	fbtn.text = "Filter"
+	fbtn.custom_minimum_size = Vector2(60, 0)
+	fbtn.add_theme_font_size_override("font_size", 12) 
+	fbtn.add_theme_constant_override("outline_size", 0)
+	var default_font = sbox.get_theme_font("font")
+	fbtn.add_theme_font_override("font", default_font)
+	hbox.add_child(fbtn)
+	
+	# Chèn HBox vào TRƯỚC CompList trong VBoxContainer
+	var vbox = comp_list.get_parent()  # đây là node V (VBoxContainer)
+	vbox.add_theme_constant_override("separation", 4)
+	vbox.add_child(hbox)
+	vbox.move_child(hbox, comp_list.get_index())  # đặt trên CompList
+	
+	# Gán vào biến để dùng sau
+	search_box = sbox
+	filter_btn = fbtn
+	
+	# Setup search
+	search_box.text_changed.connect(func(t: String):
+		_search_text = t.to_lower()
+		_build_comp_list()
+	)
+		# Setup popup SAU KHI filter_btn đã trong scene tree
+	var types = ["Frame", "Motor", "Propeller", "Battery", "Electronics"]
+	var popup = filter_btn.get_popup()
+	popup.add_theme_font_size_override("font_size", 12)
+	for t in types:
+		popup.add_check_item(t)
+	popup.id_pressed.connect(func(id: int):
+		popup.toggle_item_checked(id)
+		_active_filters.clear()
+		for i in popup.item_count:
+			if popup.is_item_checked(i):
+				_active_filters.append(popup.get_item_text(i).to_lower())
+		_build_comp_list()
+	)
 
 
 func _pick_existing():
@@ -2576,6 +2390,7 @@ func _toggle_hier(toggle: Button):
 	toggle.text = "⊞" if not left_panel.visible else "⊟"
 
 # ─────────────────────────────── SAVE / LOAD ──────────────────────
+var _current_path: String = ""
 func _setup_file_buttons():
 	var menu_btn = get_node("Root/TopBar/H/Menus/M1")
 	menu_btn.text = "File"
@@ -2595,12 +2410,19 @@ func _setup_file_buttons():
 	)
 
 func _on_new():
+	_current_path = ""
 	_clear_all()
 	_place("PVC Pipe Frame", Vector3.ZERO)
 	_update_all()
 	_log("New project", "success")
 
 func _on_save():
+	if _current_path != "":
+		_write_project(_current_path)
+		return
+	_on_save_as()
+
+func _on_save_as():
 	var dialog = FileDialog.new()
 	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	dialog.filters   = ["*.flyntic ; Flyntic Project"]
@@ -2613,7 +2435,6 @@ func _on_save():
 		dialog.queue_free()
 	)
 	dialog.canceled.connect(func(): dialog.queue_free())
-
 func _on_open():
 	var dialog = FileDialog.new()
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
@@ -2629,6 +2450,7 @@ func _on_open():
 	dialog.canceled.connect(func(): dialog.queue_free())
 
 func _write_project(path: String):
+	_current_path = path
 	var data := {
 		"version":   1,
 		"canvas_3d": _serialize_3d(),
@@ -2644,6 +2466,7 @@ func _write_project(path: String):
 	_log("Saved: " + path.get_file(), "success")
 
 func _read_project(path: String):
+	_current_path = path
 	var file = FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		_log("Open failed", "error")
@@ -2729,3 +2552,43 @@ func _clear_all():
 		if "block_type" in child:
 			child.queue_free()
 	_build_hierarchy_tree()
+#=========================== HUD label ===============================
+var _hud_label: Label
+
+func _setup_hud():
+	_hud_label = Label.new()
+	_hud_label.add_theme_font_size_override("font_size", 12)
+	_hud_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+	_hud_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_hud_label.anchor_left   = 1.0
+	_hud_label.anchor_top    = 0.0
+	_hud_label.anchor_right  = 1.0
+	_hud_label.anchor_bottom = 0.0
+	_hud_label.offset_left   = -160
+	_hud_label.offset_top    = 8
+	_hud_label.offset_right  = -8
+	_hud_label.offset_bottom = 60
+	# Add vào SubViewportContainer hoặc node chứa 3D canvas của bạn
+	$Root/Content/CenterRight/Center/Tabs/Canvas/VPC.add_child(_hud_label)
+func _update_hud():
+	if _hud_label == null:
+		return
+	# Lấy position của drone root
+	var pos = Vector3.ZERO
+	if drone_root != null and is_instance_valid(drone_root):
+		pos = drone_root.global_position
+	_hud_label.text = "X  %.2f\nY  %.2f\nZ  %.2f" % [pos.x, pos.y, pos.z]
+#================================Check Dinh ky ========================
+var _license_check_timer: float = 0.0
+const LICENSE_RECHECK_INTERVAL = 60.0  # 30 phút
+func _recheck_license():
+	print("[License Recheck] Bắt đầu check...")
+	AuthManager.access_granted.connect(func(_tier, tier_name, days_left):
+		print("[License Recheck] ✓ Vẫn hợp lệ — tier: %s, còn %d ngày" % [tier_name, days_left])
+	, CONNECT_ONE_SHOT)
+	AuthManager.access_denied.connect(_on_license_revoked, CONNECT_ONE_SHOT)
+	AuthManager.check_license_cached()
+
+func _on_license_revoked(reason: String):
+	# Kick về login
+	get_tree().change_scene_to_file("res://Auth/Login.tscn")

@@ -21,7 +21,8 @@ func _ready():
 		popup.add_item("Open Process Explorer")
 		popup.add_item("Download Update")
 		popup.add_separator()
-		popup.add_item("About")
+		popup.add_item("Submit Feedback")
+		popup.add_item("Visit Website")
 	
 	popup.id_pressed.connect(_on_item_selected)
 
@@ -45,4 +46,9 @@ func _on_popup_hide():
 func _on_item_selected(id: int):
 	var item_text = popup.get_item_text(id)
 	print("Bạn đã chọn: ", item_text)
+	match item_text:
+		"Submit Feedback":
+			OS.shell_open("https://flyntic.site/en")
+		"Visit Website":
+			OS.shell_open("https://flyntic.site/en")
 	popup.hide()

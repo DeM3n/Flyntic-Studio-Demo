@@ -33,6 +33,7 @@ const C_BRAND        = Color(0.925, 0.929, 0.961)
 # ── Ready ──────────────────────────────────────────────────────────
 func _ready():
 	_build_ui()
+	_check_deep_link()
 	AuthManager.access_granted.connect(_on_granted, CONNECT_ONE_SHOT)
 	AuthManager.access_denied.connect(_on_denied, CONNECT_ONE_SHOT)
 	AuthManager.login_failed.connect(_on_login_failed, CONNECT_ONE_SHOT)
@@ -301,24 +302,41 @@ func _build_right_panel() -> Control:
 	show_pass_btn.pressed.connect(_toggle_password_visibility)
 	pass_container.add_child(show_pass_btn)
 
-	# ── Forgot password ───────────────────────────────────────────
+# ── Forgot password + Create account (cùng hàng) ──────────────
 	_add_spacer(vbox, 10)
 	var opt_row = HBoxContainer.new()
 	vbox.add_child(opt_row)
 
+	# Create account — bên trái
+	var register_hint = Label.new()
+
+	register_hint.add_theme_font_size_override("font_size", 12)
+	register_hint.add_theme_color_override("font_color", C_TEXT_MUTED)
+	register_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	opt_row.add_child(register_hint)
+
+	var register_btn = Button.new()
+	register_btn.text = "Create account"
+	register_btn.flat = true
+	register_btn.add_theme_color_override("font_color",       C_ACCENT)
+	register_btn.add_theme_color_override("font_hover_color", C_ACCENT_HOVER)
+	register_btn.add_theme_font_size_override("font_size", 12)
+	register_btn.pressed.connect(_on_register_pressed)
+	opt_row.add_child(register_btn)
+
+	# Spacer đẩy Forgot password sang phải
 	var spacer_fill = Control.new()
 	spacer_fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	opt_row.add_child(spacer_fill)
 
+	# Forgot password — bên phải
 	forgot_btn = Button.new()
 	forgot_btn.text = "Forgot password?"
 	forgot_btn.flat = true
 	forgot_btn.add_theme_color_override("font_color",       C_ACCENT)
 	forgot_btn.add_theme_color_override("font_hover_color", C_ACCENT_HOVER)
 	forgot_btn.add_theme_font_size_override("font_size", 12)
-	# forgot_btn.pressed.connect(_on_forgot_pressed)
 	opt_row.add_child(forgot_btn)
-
 	# ── Error label ───────────────────────────────────────────────
 	_add_spacer(vbox, 8)
 	error_label = Label.new()
@@ -440,6 +458,10 @@ func _on_login_pressed():
 		return
 	_set_loading(true)
 	AuthManager.login(email, password)
+func _on_register_pressed():
+	# Thay bằng URL trang đăng ký của bạn
+	# Thêm ?redirect=flyntic://auth hoặc bất kỳ scheme nào bạn đã đăng ký
+	OS.shell_open("https://flyntic.site/en/auth/register?source=desktop")
 
 func _on_granted(tier: String, tier_name: String, days_left: int):
 	print("=== GRANTED: ", tier, " / ", tier_name, " / ", days_left)
@@ -471,7 +493,23 @@ func _set_loading(on: bool):
 	email_input.editable    = not on
 	password_input.editable = not on
 	error_label.text        = ""
+func _check_deep_link():
+	var args = OS.get_cmdline_args()
+	for arg in args:
+		if arg.begins_with("flyntic://auth"):
+			# Parse token: flyntic://auth?token=xxx
+			var token = ""
+			if "token=" in arg:
+				token = arg.split("token=")[1]
+				if "&" in token:
+					token = token.split("&")[0]
+			if token != "":
+				_set_loading(true)
+				AuthManager.login_with_token(token)
 
+
+
+#======== DRAWING ====================================
 # ══ Inner class: Grid background ══════════════════════════════════
 class _GridDraw extends Control:
 	func _draw():
