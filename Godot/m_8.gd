@@ -48,7 +48,7 @@ func _on_item_selected(id: int):
 	print("Bạn đã chọn: ", item_text)
 	match item_text:
 		"Submit Feedback":
-			OS.shell_open("https://flyntic.site/en")
+			OS.shell_open("https://flyntic.site/en/suggest/components?source=godot")
 		"Visit Website":
 			OS.shell_open("https://flyntic.site/en")
 	popup.hide()

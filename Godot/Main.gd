@@ -108,7 +108,8 @@ var COMPONENTS := {
 			{"name": "fc_slot", "pos": Vector3(0, 1.8, 0), "slot": true, "allowed": ["FC"]},
 			{"name": "esc_slot", "pos": Vector3(0, 1.2, 0), "slot": true, "allowed": ["ESC"]},
 			{"name": "center_bot", "pos": Vector3(0, 0.5, 0), "slot": true, "allowed": ["Battery"]},
-		]
+		],
+		"ground_offset": 0.0
 	},
 	"Carbon Fiber Body": {
 		"type": "Frame", "weight": 180, "thrust": 0, "capacity": 0,
@@ -120,7 +121,8 @@ var COMPONENTS := {
 			{"name": "bl", "pos": Vector3(-2, 1.5, 2), "slot": true, "allowed": ["Motor"]},
 			{"name": "br", "pos": Vector3(-2, 1.5, -2), "slot": true, "allowed": ["Motor"]},
 			{"name": "center", "pos": Vector3(0, 1.0, 0), "slot": true, "allowed": ["FC", "Battery", "ESC"]},
-		]
+		],
+		"ground_offset": 0.0
 	},
 	"Motor 2205 2300KV": {
 		"type": "Motor", "weight": 35, "thrust": 850, "capacity": 0,
@@ -205,10 +207,16 @@ func _ready():
 	hier_tree.item_selected.connect(_on_hier_item_selected)
 	hier_del_btn.pressed.connect(_remove_selected)
 	hier_tree.hide_root = true
-	hier_tree.columns = 1
+	#hier_tree.columns = 1
+	hier_tree.columns = 2                                        # ← đổi 1 thành 2
+	hier_tree.set_column_expand(0, true)                         # ← thêm
+	hier_tree.set_column_expand(1, false)                        # ← thêm
+	hier_tree.set_column_custom_minimum_width(1, 24)   
 	hier_tree.allow_reselect = true
 	hier_tree.hide_folding = false
 	hier_tree.enable_recursive_folding = true
+	hier_tree.connect("gui_input", _on_hier_tree_gui_input)      # ← thêm
+	hier_tree.connect("mouse_exited", _on_hier_mouse_exited)    
 	
 	_build_hierarchy_tree()
 	
@@ -1092,9 +1100,7 @@ func _place(id: String, pos: Vector3, port_name: String = "", parent_uid: int = 
 				node.position = p.node.global_transform.affine_inverse() * pos
 				break
 	else:
-		#components_group.add_child(node)
-		#node.global_position = pos
-			   # Nếu là frame thì gắn vào drone_root
+
 		if cdata.type == "Frame":
 			if drone_root == null:
 				drone_root = Node3D.new()
@@ -1102,8 +1108,10 @@ func _place(id: String, pos: Vector3, port_name: String = "", parent_uid: int = 
 				components_group.add_child(drone_root)
 				wires_group.get_parent().remove_child(wires_group)
 				drone_root.add_child(wires_group)
+				wires_group.position = Vector3.ZERO
+			drone_root.global_position =pos  # move drone_root, không phải node
 			drone_root.add_child(node)
-			node.global_position = pos
+			node.position = Vector3.ZERO  # frame mesh ở gốc của drone_root
 		else:
 			# Component rời — gắn thẳng vào components_group
 			components_group.add_child(node)
@@ -1144,6 +1152,7 @@ func _add_wire(from: Vector3, to: Vector3):
 		return
 	# Build a curved wire using multiple segments
 	var wire_root = Node3D.new()
+	wires_group.add_child(wire_root)
 	var segments = 8
 	var sag = max(0.1, dist * 0.15)
 	var mid = (from + to) / 2.0
@@ -1796,8 +1805,20 @@ func _update_all():
 
 
 func _on_hier_item_selected():
+	#var item = hier_tree.get_selected()
+	#if item:
+		#var uid = item.get_metadata(0)
+		#if uid != null:
+			#_highlight_component(uid)
+			#_log("Selected: " + item.get_text(0), "info")
 	var item = hier_tree.get_selected()
 	if item:
+		# Chặn highlight khi click cột lock
+		var mouse_pos = hier_tree.get_local_mouse_position()
+		var col = hier_tree.get_column_at_position(mouse_pos)
+		if col == 1:
+			hier_tree.deselect_all()
+			return
 		var uid = item.get_metadata(0)
 		if uid != null:
 			_highlight_component(uid)
@@ -1850,6 +1871,9 @@ func _remove_selected():
 	var item = hier_tree.get_selected()
 	if item and item.get_parent(): # Don't delete root
 		var uid = item.get_metadata(0)
+		if uid in locked_uids:
+			_log("Component is locked.", "warn")
+			return
 		_remove_component(uid)
 
 
@@ -1939,6 +1963,7 @@ func _play_snap_sound():
 var tree_items: Dictionary = {}   # uid -> TreeItem
 
 # =================Xây dựng lại toàn bộ Hierarchy Tree====================
+var locked_uids: Array = []
 func _build_hierarchy_tree():
 	if not is_instance_valid(hier_tree):
 		return
@@ -1990,12 +2015,57 @@ func _create_hier_item(comp: Dictionary, parent_item: TreeItem) -> TreeItem:
 		"FC":       item.set_custom_color(0, Color(0.3, 0.9, 0.5))
 		"ESC":      item.set_custom_color(0, Color(0.5, 0.6, 1.0))
 	
+		# Cột lock — hiện icon tương ứng trạng thái
+	var is_locked = comp.uid in locked_uids
+	item.set_text(1, "🔒" if is_locked else "")
+	
 	# Tự động expand parent để thấy con
 	if parent_item:
 		parent_item.set_collapsed(false)
 	
 	tree_items[comp.uid] = item
 	return item
+
+func _on_hier_tree_gui_input(event: InputEvent):
+	if event is InputEventMouseMotion:
+		var pos = hier_tree.get_local_mouse_position()
+		var item = hier_tree.get_item_at_position(pos)
+		# Clear tất cả lock icon tạm (chỉ show khi hover)
+		for uid in tree_items:
+			var ti = tree_items[uid]
+			if ti == null: continue
+			var is_locked = uid in locked_uids
+			ti.set_text(1, "🔒" if is_locked else "")
+		# Show icon trên item đang hover
+		if item != null:
+			var uid = item.get_metadata(0)
+			var is_locked = uid in locked_uids
+			item.set_text(1, "🔒" if is_locked else "🔓")
+	
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var pos = hier_tree.get_local_mouse_position()
+		var item = hier_tree.get_item_at_position(pos)
+		if item == null: return
+		var col = hier_tree.get_column_at_position(pos)
+		if col != 1: return  # chỉ xử lý click cột lock
+		var uid = item.get_metadata(0)
+		if uid in locked_uids:
+			locked_uids.erase(uid)
+			item.set_text(1, "🔓")
+		else:
+			locked_uids.append(uid)
+			item.set_text(1, "🔒")
+		#===========================================
+		hier_tree.deselect_all()
+		get_viewport().set_input_as_handled()
+
+func _on_hier_mouse_exited():
+	# Khi chuột rời khỏi tree, ẩn lock icon của những cái chưa locked
+	for uid in tree_items:
+		var ti = tree_items[uid]
+		if ti == null: continue
+		var is_locked = uid in locked_uids
+		ti.set_text(1, "🔒" if is_locked else "")
 
 #============COMPONENT LIST===============
 var _cat_collapsed: Dictionary = {}  # track trạng thái collapsed của từng category
@@ -2155,97 +2225,313 @@ func _setup_comp_search():
 	)
 
 
+#func _pick_existing():
+	#var mpos = viewport.get_mouse_position()
+	#var ro = camera.project_ray_origin(mpos)
+	#var rd = camera.project_ray_normal(mpos)
+	#
+	#var best_uid := -1
+	#var best_d := 1000.0
+	#
+	#for c in placed:
+		#if not is_instance_valid(c.node): continue
+		#if c.type == "Frame": continue
+		#var to_node = c.node.global_position - ro
+		#var projection = to_node.dot(rd)
+		#if projection > 0:
+			#var closest_point = ro + rd * projection
+			#var dist = closest_point.distance_to(c.node.global_position)
+			#if dist < 1.0 and dist < best_d:
+				#best_d = dist
+				#best_uid = c.uid
+	#
+	#if best_uid == -1:
+		#return
+	#
+	## Tìm motor entry
+	#var motor_entry = null
+	#var motor_idx = -1
+	#for i in range(placed.size()):
+		#if placed[i].uid == best_uid:
+			#motor_entry = placed[i]
+			#motor_idx = i
+			#break
+	#
+	#if motor_entry == null:
+		#return
+	#
+	#cur_id = motor_entry.id
+	#_ghost_children.clear()
+	#
+	## Thu thập children + offset (dùng local position để không phụ thuộc world transform)
+	#var children_indices: Array[int] = []
+	#for j in range(placed.size()):
+		#var candidate = placed[j]
+		#if candidate.get("parent_id", -1) != best_uid:
+			#continue
+		#var local_offset = Vector3.ZERO
+		#if is_instance_valid(candidate.get("node")) and is_instance_valid(motor_entry.node):
+			#local_offset = motor_entry.node.global_transform.affine_inverse() * candidate.node.global_position
+		#_ghost_children.append({
+			#"id": candidate.id,
+			#"local_offset": local_offset,
+			#"port_name": candidate.get("port_name", ""),
+		#})
+		#children_indices.append(j)
+	#
+	## Xóa children khỏi placed (không free node — sẽ bị free theo motor)
+	#children_indices.sort()
+	#children_indices.reverse()
+	#for idx in children_indices:
+		#placed.remove_at(idx)
+	#
+	## Xóa motor khỏi placed
+	## Phải điều chỉnh motor_idx vì đã remove children ở trên
+	## Tìm lại motor_idx sau khi xóa children
+	#motor_idx = -1
+	#for i in range(placed.size()):
+		#if placed[i].uid == best_uid:
+			#motor_idx = i
+			#break
+	#if motor_idx != -1:
+		#placed.remove_at(motor_idx)
+	#
+	## Tạo ghost mới
+	#ghost = _build_mesh(cur_id, true)
+	#components_group.add_child(ghost)
+	#
+	## Free node motor (children node là con của motor node nên bị free theo — đúng)
+	#if is_instance_valid(motor_entry.node):
+		#motor_entry.node.queue_free()
+	#
+	#_show_snap_hints(cur_id)
+	#
+	## Tạo ghost visual cho children
+	#for child_info in _ghost_children:
+		#var child_ghost = _build_mesh(child_info.id, true)
+		#ghost.add_child(child_ghost)
+		#child_ghost.position = child_info.local_offset
+	#
+	#_rebuild_wires()
+	#_update_all()
+
+#func _pick_existing():
+	#var mpos = viewport.get_mouse_position()
+	#var ro = camera.project_ray_origin(mpos)
+	#var rd = camera.project_ray_normal(mpos)
+#
+	#var best_uid := -1
+	#var best_d := 1000.0
+	#var is_frame := false
+#
+	#for c in placed:
+		#if not is_instance_valid(c.node): continue
+		#var to_node = c.node.global_position - ro
+		#var projection = to_node.dot(rd)
+		#if projection > 0:
+			#var closest_point = ro + rd * projection
+			#var dist = closest_point.distance_to(c.node.global_position)
+			## Frame thường lớn hơn nên dùng threshold rộng hơn
+			#var threshold = 2.5 if c.type == "Frame" else 1.0
+			#if dist < threshold and dist < best_d:
+				#best_d = dist
+				#best_uid = c.uid
+				#is_frame = c.type == "Frame"
+#
+	#if best_uid == -1:
+		#return
+#
+	#var picked_entry = null
+	#var picked_idx = -1
+	#for i in range(placed.size()):
+		#if placed[i].uid == best_uid:
+			#picked_entry = placed[i]
+			#picked_idx = i
+			#break
+#
+	#if picked_entry == null:
+		#return
+#
+	#cur_id = picked_entry.id
+	#_ghost_children.clear()
+#
+	## Thu thập children + offset
+	#var children_indices: Array[int] = []
+	#for j in range(placed.size()):
+		#var candidate = placed[j]
+		#if candidate.get("parent_id", -1) != best_uid:
+			#continue
+		#var local_offset = Vector3.ZERO
+		#if is_instance_valid(candidate.get("node")) and is_instance_valid(picked_entry.node):
+			#local_offset = picked_entry.node.global_transform.affine_inverse() * candidate.node.global_position
+		#_ghost_children.append({
+			#"id": candidate.id,
+			#"local_offset": local_offset,
+			#"port_name": candidate.get("port_name", ""),
+		#})
+		#children_indices.append(j)
+#
+	#children_indices.sort()
+	#children_indices.reverse()
+	#for idx in children_indices:
+		#placed.remove_at(idx)
+#
+	## Tìm lại picked_idx sau khi remove children
+	#picked_idx = -1
+	#for i in range(placed.size()):
+		#if placed[i].uid == best_uid:
+			#picked_idx = i
+			#break
+	#if picked_idx != -1:
+		#placed.remove_at(picked_idx)
+#
+	## Tạo ghost
+	#ghost = _build_mesh(cur_id, true)
+	#components_group.add_child(ghost)
+#
+	## Free node + dọn drone_root nếu là Frame
+	#if is_instance_valid(picked_entry.node):
+		#picked_entry.node.queue_free()
+#
+	#if is_frame and drone_root != null:
+			## Reparent wires_group ra ngoài TRƯỚC khi free drone_root
+		#if is_instance_valid(wires_group) and wires_group.get_parent() == drone_root:
+			#drone_root.remove_child(wires_group)
+			#components_group.add_child(wires_group)
+		## Children của drone_root (motors, v.v.) đã bị queue_free theo frame node
+		## Xóa drone_root, sẽ tạo lại khi place Frame mới
+		#drone_root.queue_free()
+		#drone_root = null
+#
+	#_show_snap_hints(cur_id)
+#
+	#for child_info in _ghost_children:
+		#var child_ghost = _build_mesh(child_info.id, true)
+		#ghost.add_child(child_ghost)
+		#child_ghost.position = child_info.local_offset
+#
+	#_rebuild_wires()
+	#_update_all()y
 func _pick_existing():
 	var mpos = viewport.get_mouse_position()
 	var ro = camera.project_ray_origin(mpos)
 	var rd = camera.project_ray_normal(mpos)
-	
+
 	var best_uid := -1
 	var best_d := 1000.0
-	
+	var is_frame := false
+
 	for c in placed:
 		if not is_instance_valid(c.node): continue
-		if c.type == "Frame": continue
 		var to_node = c.node.global_position - ro
 		var projection = to_node.dot(rd)
 		if projection > 0:
 			var closest_point = ro + rd * projection
 			var dist = closest_point.distance_to(c.node.global_position)
-			if dist < 1.0 and dist < best_d:
+			var threshold = 2.5 if c.type == "Frame" else 1.0
+			if dist < threshold and dist < best_d:
 				best_d = dist
 				best_uid = c.uid
-	
+				is_frame = c.type == "Frame"
+
 	if best_uid == -1:
 		return
-	
-	# Tìm motor entry
-	var motor_entry = null
-	var motor_idx = -1
-	for i in range(placed.size()):
-		if placed[i].uid == best_uid:
-			motor_entry = placed[i]
-			motor_idx = i
-			break
-	
-	if motor_entry == null:
+	if best_uid in locked_uids:
 		return
-	
-	cur_id = motor_entry.id
-	_ghost_children.clear()
-	
-	# Thu thập children + offset (dùng local position để không phụ thuộc world transform)
-	var children_indices: Array[int] = []
-	for j in range(placed.size()):
-		var candidate = placed[j]
-		if candidate.get("parent_id", -1) != best_uid:
-			continue
-		var local_offset = Vector3.ZERO
-		if is_instance_valid(candidate.get("node")) and is_instance_valid(motor_entry.node):
-			local_offset = motor_entry.node.global_transform.affine_inverse() * candidate.node.global_position
-		_ghost_children.append({
-			"id": candidate.id,
-			"local_offset": local_offset,
-			"port_name": candidate.get("port_name", ""),
-		})
-		children_indices.append(j)
-	
-	# Xóa children khỏi placed (không free node — sẽ bị free theo motor)
-	children_indices.sort()
-	children_indices.reverse()
-	for idx in children_indices:
-		placed.remove_at(idx)
-	
-	# Xóa motor khỏi placed
-	# Phải điều chỉnh motor_idx vì đã remove children ở trên
-	# Tìm lại motor_idx sau khi xóa children
-	motor_idx = -1
+
+	var picked_entry = null
+	var picked_idx = -1
 	for i in range(placed.size()):
 		if placed[i].uid == best_uid:
-			motor_idx = i
+			picked_entry = placed[i]
+			picked_idx = i
 			break
-	if motor_idx != -1:
-		placed.remove_at(motor_idx)
-	
-	# Tạo ghost mới
+
+	if picked_entry == null:
+		return
+
+	cur_id = picked_entry.id
+	_ghost_children.clear()
+
+	# Collect đệ quy tất cả descendants (children + grandchildren)
+	var all_descendants = _collect_children_recursive(best_uid, picked_entry.node)
+
+	for desc in all_descendants:
+		_ghost_children.append(desc)
+
+	# Xóa tất cả descendants khỏi placed
+	var descendant_uids = []
+	for desc in all_descendants:
+		descendant_uids.append(desc.uid)
+
+	var to_remove = []
+	for i in range(placed.size()):
+		if placed[i].uid in descendant_uids:
+			to_remove.append(i)
+	to_remove.sort()
+	to_remove.reverse()
+	for idx in to_remove:
+		placed.remove_at(idx)
+
+	# Xóa picked entry khỏi placed
+	picked_idx = -1
+	for i in range(placed.size()):
+		if placed[i].uid == best_uid:
+			picked_idx = i
+			break
+	if picked_idx != -1:
+		placed.remove_at(picked_idx)
+
+	# Tạo ghost
 	ghost = _build_mesh(cur_id, true)
 	components_group.add_child(ghost)
-	
-	# Free node motor (children node là con của motor node nên bị free theo — đúng)
-	if is_instance_valid(motor_entry.node):
-		motor_entry.node.queue_free()
-	
+
+	# Dọn drone_root nếu là Frame
+	if is_frame and drone_root != null:
+		if is_instance_valid(wires_group) and wires_group.get_parent() == drone_root:
+			drone_root.remove_child(wires_group)
+			components_group.add_child(wires_group)
+			wires_group.position = Vector3.ZERO
+		drone_root.queue_free()
+		drone_root = null
+
+	# Free node gốc (children node bị free theo vì là con của nó)
+	if is_instance_valid(picked_entry.node):
+		picked_entry.node.queue_free()
+
 	_show_snap_hints(cur_id)
-	
-	# Tạo ghost visual cho children
+
+	# Tạo ghost visual cho children (chỉ depth 0 — direct children)
 	for child_info in _ghost_children:
-		var child_ghost = _build_mesh(child_info.id, true)
-		ghost.add_child(child_ghost)
-		child_ghost.position = child_info.local_offset
-	
+		if child_info.get("depth", 0) == 0:
+			var child_ghost = _build_mesh(child_info.id, true)
+			ghost.add_child(child_ghost)
+			child_ghost.position = child_info.local_offset
+
 	_rebuild_wires()
 	_update_all()
-	
 
+func _collect_children_recursive(parent_uid: int, parent_node: Node3D, depth: int = 0) -> Array:
+	var result = []
+	for j in range(placed.size()):
+		var candidate = placed[j]
+		if candidate.get("parent_id", -1) != parent_uid:
+			continue
+		var local_offset = Vector3.ZERO
+		if is_instance_valid(candidate.get("node")) and is_instance_valid(parent_node):
+			local_offset = parent_node.global_transform.affine_inverse() * candidate.node.global_position
+		result.append({
+			"id": candidate.id,
+			"uid": candidate.uid,
+			"local_offset": local_offset,
+			"port_name": candidate.get("port_name", ""),
+			"parent_uid": parent_uid,
+			"depth": depth,
+		})
+		# Đệ quy lấy grandchildren
+		var grandchildren = _collect_children_recursive(candidate.uid, candidate.node, depth + 1)
+		result.append_array(grandchildren)
+	return result
 
 func _remove_component(uid: int):
 	var found_idx = -1
@@ -2283,57 +2569,115 @@ func _remove_component(uid: int):
 	_update_all()
 
 
+#func _re_place_ghost_children(parent_uid_hint: int):
+	#if _ghost_children.is_empty():
+		#
+		#return
+	## Tìm motor vừa place
+	#var parent_entry = null
+	#var latest_uid = -1
+	#for entry in placed:
+		#if entry.id == cur_id and entry.uid > latest_uid:
+			#latest_uid = entry.uid
+			#parent_entry = entry
+	#
+	#if parent_entry == null:
+		#_log("FAILED: parent_entry is null, cur_id=" + cur_id, "error")
+		#_ghost_children.clear()
+		#return
+	#
+	#if not is_instance_valid(parent_entry.get("node")):
+		#_log("FAILED: parent node invalid", "error")
+		#_ghost_children.clear()
+		#return
+		#
+	#
+	#for child_info in _ghost_children:
+		#
+		#var child_type = COMPONENTS[child_info.id].type
+		#var ports = COMPONENTS[parent_entry.id].get("ports", [])
+		#
+		#var target_port = ""
+		#var target_pos = parent_entry.node.global_position
+		#
+		#for port in ports:
+			#if not port.get("allowed", []).has(child_type):
+				#continue
+			#var occupied = false
+			#for other in placed:
+				#if other.get("port_name", "") == port.name and other.get("parent_id", -1) == parent_entry.uid:
+					#occupied = true
+					#break
+			#if not occupied:
+				#target_port = port.name
+				#target_pos = parent_entry.node.global_transform * port.pos
+				#break
+		#
+		#_place(child_info.id, target_pos, target_port, parent_entry.uid)
+#
+	#
+	#_ghost_children.clear()
 func _re_place_ghost_children(parent_uid_hint: int):
-
-	
 	if _ghost_children.is_empty():
-		
 		return
-	# Tìm motor vừa place
-	var parent_entry = null
+
+	# Tìm parent vừa place (frame hoặc motor)
 	var latest_uid = -1
+	var parent_entry = null
 	for entry in placed:
 		if entry.id == cur_id and entry.uid > latest_uid:
 			latest_uid = entry.uid
 			parent_entry = entry
-	
-	if parent_entry == null:
-		_log("FAILED: parent_entry is null, cur_id=" + cur_id, "error")
-		_ghost_children.clear()
-		return
-	
-	if not is_instance_valid(parent_entry.get("node")):
-		_log("FAILED: parent node invalid", "error")
-		_ghost_children.clear()
-		return
-		
-	
-	for child_info in _ghost_children:
-		
-		var child_type = COMPONENTS[child_info.id].type
-		var ports = COMPONENTS[parent_entry.id].get("ports", [])
-		
-		var target_port = ""
-		var target_pos = parent_entry.node.global_position
-		
-		for port in ports:
-			if not port.get("allowed", []).has(child_type):
-				continue
-			var occupied = false
-			for other in placed:
-				if other.get("port_name", "") == port.name and other.get("parent_id", -1) == parent_entry.uid:
-					occupied = true
-					break
-			if not occupied:
-				target_port = port.name
-				target_pos = parent_entry.node.global_transform * port.pos
-				break
-		
-		_place(child_info.id, target_pos, target_port, parent_entry.uid)
 
-	
+	if parent_entry == null or not is_instance_valid(parent_entry.get("node")):
+		_ghost_children.clear()
+		return
+
+	# Map uid cũ → uid mới (để grandchildren tìm đúng parent mới)
+	var uid_remap = {}
+	uid_remap[_ghost_children[0].get("parent_uid", -1) if not _ghost_children.is_empty() else -1] = parent_entry.uid
+
+	# Sort theo depth để place cha trước con
+	var sorted_children = _ghost_children.duplicate()
+	sorted_children.sort_custom(func(a, b): return a.get("depth", 0) < b.get("depth", 0))
+
+	for child_info in sorted_children:
+		# Tìm parent thực sự của child này (dùng uid_remap)
+		var old_parent_uid = child_info.get("parent_uid", -1)
+		var new_parent_uid = uid_remap.get(old_parent_uid, parent_entry.uid)
+
+		# Tìm parent entry mới
+		var real_parent = null
+		for entry in placed:
+			if entry.uid == new_parent_uid:
+				real_parent = entry
+				break
+
+		if real_parent == null or not is_instance_valid(real_parent.get("node")):
+			continue
+
+		# Dùng đúng port_name cũ, tính lại world pos từ port
+		var port_name = child_info.get("port_name", "")
+		var target_pos = real_parent.node.global_position
+		var ports = COMPONENTS[real_parent.id].get("ports", [])
+		for port in ports:
+			if port.name == port_name:
+				target_pos = real_parent.node.global_transform * port.pos
+				break
+
+		_place(child_info.id, target_pos, port_name, new_parent_uid)
+
+		# Sau khi place, lấy uid mới của child vừa place để grandchildren dùng
+		var new_child_uid = -1
+		var latest = -1
+		for entry in placed:
+			if entry.id == child_info.id and entry.uid > latest:
+				latest = entry.uid
+				new_child_uid = entry.uid
+		if new_child_uid != -1:
+			uid_remap[child_info.get("uid", -1)] = new_child_uid
+
 	_ghost_children.clear()
-	
 #=============CAMERA ON DRONE ====================
 func _focus_camera_on_drone():
 	var min_pos = Vector3(INF, INF, INF)
