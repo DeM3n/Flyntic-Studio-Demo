@@ -138,6 +138,16 @@ var hovered_wire: int = -1
 var _pending_delete_wire: int = -1
 # Thay vì dùng wire_tip_timer cho lỗi
 var persistent_error: Dictionary = {}  # { text: String, screen_pos: Vector2, conn_idx: int }
+# Box selection
+var box_selecting    : bool    = false
+var box_start        : Vector2 = Vector2.ZERO
+var box_end          : Vector2 = Vector2.ZERO
+var selected_uids    : Array   = []   # multi-select list
+
+# Multi-drag
+var multi_dragging   : bool    = false
+var multi_drag_start : Vector2 = Vector2.ZERO   # screen pos khi bắt đầu drag
+var multi_drag_origins : Dictionary = {}         # uid → world pos ban đầu
 # ─────────────────────────────── INIT ─────────────────────────────
 func _ready():
 	name = "Wiring"
@@ -412,7 +422,11 @@ func _draw_canvas():
 
 	# Reset transform before drawing screen-space UI overlays
 	cv.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
+	# ── Box selection overlay ──────────────────────────────────────────
+	if box_selecting:
+		var r = Rect2(box_start, box_end - box_start).abs()
+		cv.draw_rect(r, Color(0.3, 0.6, 1.0, 0.15), true)
+		cv.draw_rect(r, Color(0.3, 0.6, 1.0, 0.8),  false)
 	# Rotation toolbar for selected component
 	var sel = _get_selected_comp()
 	if sel.size() > 0:
@@ -842,21 +856,88 @@ func _canvas_input(event: InputEvent):
 					panning = false
 					canvas.queue_redraw()
 				return
-
+	# ══════════════════ LEFT BUTTON ═══════════════════════════
+		#if event.button_index == MOUSE_BUTTON_LEFT:
+			#if event.pressed:
+				## Check rotation toolbar buttons first
+				#if rot_toolbar_rect.has_point(mp):
+					#_handle_toolbar_click(mp)
+					#return
+				#var bh = _hit_bend_point(mp)
+				#if bh.size() > 0:
+					#drag_bend = bh
+					#canvas.queue_redraw()
+					#return
+#
+#
+				## Click vào hint dot → thêm bend point mới rồi kéo ngay
+				#var wh = _hit_wire_hint(mp)
+				#if wh.size() > 0 and not wire_active:
+					#var bps = connections[wh.conn_idx].get("bend_points", [])
+					#bps.insert(wh.insert_after, wh.pos)
+					#connections[wh.conn_idx]["bend_points"] = bps
+					#drag_bend = {"conn_idx": wh.conn_idx, "pt_idx": wh.insert_after}
+					#canvas.queue_redraw()
+					#return
+#
+				## Port hit?
+				#var ph = _hit_port(mp)
+				#if ph.size() > 0:
+					#if not wire_active:
+						#wire_active  = true
+						#wire_from    = ph
+						#wire_cur_pos = mp
+					#else:
+						#_try_connect(wire_from, ph)
+						#wire_active = false
+						#wire_from   = {}
+					#canvas.queue_redraw()
+					#return
+#
+				## Cancel wire
+				#if wire_active:
+					#wire_active = false
+					#wire_from   = {}
+					#canvas.queue_redraw()
+					#return
+#
+				## Component drag / selection
+				#var comp = _hit_component(mp)
+				#if comp.size() > 0:
+					#drag_comp   = comp
+					#drag_offset = mp - _world_to_screen(comp.pos)
+					#for c in canvas_components: c.selected = false
+					#comp.selected = true
+					#selected_uid  = comp.uid
+					#canvas.queue_redraw()
+				#else:
+					## Click on empty canvas — deselect
+					#for c in canvas_components: c.selected = false
+					#selected_uid = -1
+					#canvas.queue_redraw()
+			#else:
+				#if drag_comp.size() > 0:
+					#drag_comp.pos = _snap_to_grid(drag_comp.pos)
+					#drag_comp = {}
+					#canvas.queue_redraw()
+				#if drag_bend.size() > 0:
+					#drag_bend = {}
+					#canvas.queue_redraw()
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				# Check rotation toolbar buttons first
+				# Rotation toolbar
 				if rot_toolbar_rect.has_point(mp):
 					_handle_toolbar_click(mp)
 					return
+
+				# Bend point drag
 				var bh = _hit_bend_point(mp)
 				if bh.size() > 0:
 					drag_bend = bh
 					canvas.queue_redraw()
 					return
 
-
-				# Click vào hint dot → thêm bend point mới rồi kéo ngay
+				# Wire hint → add bend point
 				var wh = _hit_wire_hint(mp)
 				if wh.size() > 0 and not wire_active:
 					var bps = connections[wh.conn_idx].get("bend_points", [])
@@ -866,7 +947,7 @@ func _canvas_input(event: InputEvent):
 					canvas.queue_redraw()
 					return
 
-				# Port hit?
+				# Port hit
 				var ph = _hit_port(mp)
 				if ph.size() > 0:
 					if not wire_active:
@@ -887,21 +968,75 @@ func _canvas_input(event: InputEvent):
 					canvas.queue_redraw()
 					return
 
-				# Component drag / selection
+				# ── Component hit ──────────────────────────────────
 				var comp = _hit_component(mp)
 				if comp.size() > 0:
-					drag_comp   = comp
-					drag_offset = mp - _world_to_screen(comp.pos)
-					for c in canvas_components: c.selected = false
-					comp.selected = true
-					selected_uid  = comp.uid
+					if comp.uid in selected_uids:
+						# Click vào component đã được chọn trong multi-select
+						# → bắt đầu multi-drag ngay, giữ nguyên selection
+						multi_dragging    = true
+						multi_drag_start  = mp
+						multi_drag_origins.clear()
+						for c in canvas_components:
+							if c.uid in selected_uids:
+								multi_drag_origins[c.uid] = c.pos
+						# Lưu bend_points origins của các wire nằm hoàn toàn trong selection
+						multi_drag_origins["_bends"] = {}
+						for i in range(connections.size()):
+							var conn = connections[i]
+							if conn.from_comp.uid in selected_uids and conn.to_comp.uid in selected_uids:
+								var bps = conn.get("bend_points", [])
+								if bps.size() > 0:
+									multi_drag_origins["_bends"][i] = bps.duplicate(true)
+					else:
+						# Click vào component mới → single select + drag
+						for c in canvas_components: c.selected = false
+						selected_uids = [comp.uid]
+						comp.selected = true
+						selected_uid  = comp.uid
+						drag_comp     = comp
+						drag_offset   = mp - _world_to_screen(comp.pos)
 					canvas.queue_redraw()
-				else:
-					# Click on empty canvas — deselect
-					for c in canvas_components: c.selected = false
-					selected_uid = -1
+					return
+
+				# ── Empty canvas → bắt đầu box selection ──────────
+				for c in canvas_components: c.selected = false
+				selected_uid  = -1
+				selected_uids = []
+				box_selecting = true
+				box_start     = mp
+				box_end       = mp
+				canvas.queue_redraw()
+
+			else:  # LEFT released
+				# Kết thúc box selection → chọn các component nằm trong rect
+				if box_selecting:
+					box_selecting = false
+					var sel_rect  = Rect2(box_start, box_end - box_start).abs()
+					selected_uids = []
+					for c in canvas_components:
+						var sp = _world_to_screen(c.pos)
+						# dùng center của component để kiểm tra (hoặc toàn bộ bounds nếu bạn có)
+						if sel_rect.has_point(sp):
+							c.selected    = true
+							selected_uids.append(c.uid)
+						else:
+							c.selected = false
+					selected_uid = selected_uids[0] if selected_uids.size() > 0 else -1
 					canvas.queue_redraw()
-			else:
+					return
+
+				# Kết thúc multi-drag → snap tất cả
+				if multi_dragging:
+					multi_dragging = false
+					for c in canvas_components:
+						if c.uid in selected_uids:
+							c.pos = _snap_to_grid(c.pos)
+					multi_drag_origins.clear()
+					canvas.queue_redraw()
+					return
+
+				# Kết thúc single drag
 				if drag_comp.size() > 0:
 					drag_comp.pos = _snap_to_grid(drag_comp.pos)
 					drag_comp = {}
@@ -909,7 +1044,7 @@ func _canvas_input(event: InputEvent):
 				if drag_bend.size() > 0:
 					drag_bend = {}
 					canvas.queue_redraw()
-
+# ══════════════════════ MOUSE MOTION ══════════════════════════
 	elif event is InputEventMouseMotion:
 		var new_hovered = _hit_wire(event.position)
 		if new_hovered != hovered_wire:
@@ -928,6 +1063,33 @@ func _canvas_input(event: InputEvent):
 		elif drag_comp.size() > 0:
 			drag_comp.pos = _screen_to_world(event.position - drag_offset)
 			canvas.queue_redraw()
+		# ── Box selection đang kéo ─────────────────────────────────
+		if box_selecting:
+			box_end = event.position
+			# Preview highlight
+			var sel_rect = Rect2(box_start, box_end - box_start).abs()
+			for c in canvas_components:
+				c.selected = sel_rect.has_point(_world_to_screen(c.pos))
+			canvas.queue_redraw()
+			return
+
+		# ── Multi-drag ─────────────────────────────────────────────
+		if multi_dragging:
+			var delta_screen = event.position - multi_drag_start
+			var delta_world  = delta_screen / zoom_level
+			for c in canvas_components:
+				if c.uid in selected_uids:
+					c.pos = multi_drag_origins[c.uid] + delta_world
+			# Dịch chuyển bend_points theo
+			var bends_origins = multi_drag_origins.get("_bends", {})
+			for i in bends_origins:
+				var orig_bps : Array = bends_origins[i]
+				var new_bps = []
+				for bp in orig_bps:
+					new_bps.append(bp + delta_world)
+				connections[i]["bend_points"] = new_bps
+			canvas.queue_redraw()
+			return
 		elif wire_active:
 			wire_cur_pos = event.position
 			canvas.queue_redraw()
