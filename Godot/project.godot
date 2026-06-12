@@ -24,6 +24,7 @@ window/stretch/mode="canvas_items"
 [autoload]
 
 AuthManager="*uid://ktwumacpjx2v"
+ProjectState="*uid://bge52d1rmd1f0"
 
 [dotnet]
 

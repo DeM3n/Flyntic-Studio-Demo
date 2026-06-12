@@ -461,11 +461,13 @@ func _on_login_pressed():
 func _on_register_pressed():
 	# Thay bằng URL trang đăng ký của bạn
 	# Thêm ?redirect=flyntic://auth hoặc bất kỳ scheme nào bạn đã đăng ký
-	OS.shell_open("https://flyntic.site/en/auth/register?source=desktop")
+	OS.shell_open("https://flyntic.site/en/auth/register?source=godot")
 
 func _on_granted(tier: String, tier_name: String, days_left: int):
-	print("=== GRANTED: ", tier, " / ", tier_name, " / ", days_left)
-	get_tree().change_scene_to_file("res://Main.tscn")
+	#print("=== GRANTED: ", tier, " / ", tier_name, " / ", days_left)
+	#get_tree().change_scene_to_file("res://Main.tscn")
+	ProjectState.tier_name = tier if tier != "" else "trial"
+	get_tree().change_scene_to_file("res://DashBoard/Dashboard.tscn") 
 
 func _on_denied(reason: String):
 	print("=== DENIED: ", reason)
@@ -537,199 +539,7 @@ class _GridDraw extends Control:
 		draw_line(Vector2(w-pad, h-pad),     Vector2(w-pad, h-pad-blen),     bc, 1.5)
 
 # ══ Inner class: Drone graphic ════════════════════════════════════
-# ══ Inner class: Drone graphic (redesigned) ═══════════════════════
-#class _DroneDraw extends Control:
-	#const ACC     = Color(0.188, 0.502, 0.957)
-	#const BODY_BG = Color(0.075, 0.086, 0.122)
-	#const BODY_IN = Color(0.102, 0.125, 0.208)
-	#const SHELL   = Color(0.165, 0.169, 0.220)
-#
-	#var _drone_pos  : Vector2 = Vector2.ZERO
-	#var _target_pos : Vector2 = Vector2.ZERO
-	#var _initialized: bool    = false
-		## Idle state
-	#var _is_hovering : bool    = false
-	#var _idle_time   : float   = 0.0
-	#var _idle_angle  : float   = 0.0
-	#var _idle_center : Vector2 = Vector2.ZERO 
-	#func _ready():
-		#mouse_filter = Control.MOUSE_FILTER_PASS
-		#set_process(true)
-#
-	#func _process(delta: float):
-		#if not _initialized and size != Vector2.ZERO:
-			#_drone_pos  = size * 0.5
-			#_target_pos = size * 0.5
-			#_initialized = true
-		#if _is_hovering:
-			## Theo chuột
-			#_drone_pos = _drone_pos.lerp(_target_pos, 0.04)
-		#else:
-			## Idle: bay lượn theo hình sin chậm, tự drift
-			#_idle_time  += delta
-			#_idle_angle += delta * 0.4  # tốc độ xoay vòng
-			## Lượn nhẹ theo ellipse quanh idle_center
-			#var radius_x = size.x * 0.18
-			#var radius_y = size.y * 0.10
-			#var idle_target = _idle_center + Vector2(
-				#cos(_idle_angle)        * radius_x,
-				#sin(_idle_angle * 1.3)  * radius_y   # lệch tần số → hình 8 mềm
-			#)
-			#_drone_pos = _drone_pos.lerp(idle_target, 0.012) 
-		#queue_redraw()
-#
-	#func _gui_input(event):
-		#if event is InputEventMouseMotion:
-			#_target_pos = event.position
-#
-	#func _notification(what: int):
-		#if what == NOTIFICATION_MOUSE_EXIT:
-			## Khi chuột rời panel: cập nhật idle_center = vị trí hiện tại
-			## để drone không giật mạnh về góc nào
-			#_idle_center = _drone_pos
-			#_idle_angle  = 0.0
-			#_is_hovering = false
-#
-	#func _draw():
-		#var w = size.x
-		#var h = size.y
-#
-		#var pts = _bezier_points(
-			#Vector2(w * 0.04, h * 0.82),
-			#Vector2(w * 0.35, h * 0.20),
-			#Vector2(w * 0.70, h * 0.55),
-			#Vector2(w * 0.96, h * 0.08),
-			#40
-		#)
-		#var dash_on = true; var dash_len = 5.0; var acc_d = 0.0
-		#for i in range(pts.size() - 1):
-			#var seg_len = pts[i].distance_to(pts[i + 1])
-			#if dash_on:
-				#draw_line(pts[i], pts[i + 1], Color(ACC, 0.18), 1.0)
-			#acc_d += seg_len
-			#if acc_d >= dash_len:
-				#acc_d   = 0.0
-				#dash_on = not dash_on
-#
-		#var wp1 = Vector2(w * 0.04, h * 0.82)
-		#var wp3 = Vector2(w * 0.96, h * 0.08)
-		#draw_circle(wp1, 3.0, Color(ACC, 0.40))
-		#draw_circle(wp3, 4.0, Color(ACC, 0.75))
-		#draw_line(wp3 + Vector2(-12, 0), wp3 + Vector2(12, 0), Color(ACC, 0.50), 1.0)
-		#draw_line(wp3 + Vector2(0, -12), wp3 + Vector2(0, 12), Color(ACC, 0.50), 1.0)
-#
-		#for rf in [0.06, 0.10]:
-			#draw_arc(_drone_pos, w * rf, 0, TAU, 48, Color(ACC, 0.09), 1.0)
-#
-		#_draw_hud_box(Vector2(w * 0.60, h * 0.20), "ALT 320m")
-		#_draw_hud_box(Vector2(w * 0.02, h * 0.62), "WP 01")
-#
-		#_draw_drone(_drone_pos, w * 0.10)
-#
-	#func _draw_drone(center: Vector2, arm: float):
-		#var bw  = arm * 1.30
-		#var bh  = arm * 0.80
-		#var mt  = arm * 0.13
-		#var bl  = arm * 0.88
-#
-		#var tips = []
-		#for ang_deg in [-135.0, -45.0, 45.0, 135.0]:
-			#tips.append(center + Vector2(cos(deg_to_rad(ang_deg)), sin(deg_to_rad(ang_deg))) * bl)
-#
-		#for tip in tips:
-			#draw_line(center, tip, Color(ACC, 0.65), 1.3)
-#
-		#var prop_offsets = [-135.0, -45.0, 45.0, 135.0]
-		#for i in range(4):
-			#var tip = tips[i]
-			#var base_ang = deg_to_rad(prop_offsets[i])
-			#for blade_rot in [0.0, PI * 0.5]:
-				#_draw_propeller_blade(tip, base_ang + blade_rot, arm * 0.30, arm * 0.065)
-			#draw_circle(tip, mt + 1.5, Color(0.059, 0.063, 0.078))
-			#draw_arc(tip, mt + 1.5, 0, TAU, 32, Color(ACC, 0.80), 1.0)
-			#draw_circle(tip, mt * 0.35, Color(ACC, 0.55))
-#
-		## Body
-		#var body_rect = Rect2(center - Vector2(bw * 0.5, bh * 0.5), Vector2(bw, bh))
-		#draw_rect(body_rect, BODY_BG)
-		#_draw_rect_border(body_rect, SHELL, 1.2)
-#
-		#var ir = Rect2(center - Vector2(bw * 0.33, bh * 0.28), Vector2(bw * 0.66, bh * 0.56))
-		#draw_rect(ir, BODY_IN)
-		#_draw_rect_border(ir, Color(ACC, 0.50), 0.8)
-#
-		## Accent stripe — cạnh TRÁI (mặt sau)
-		#var stripe = Rect2(ir.position, Vector2(bw * 0.08, ir.size.y))
-		#draw_rect(stripe, Color(ACC, 0.22))
-#
-		## Camera — cạnh PHẢI thân drone (mặt trước)
-		#var cam_w = bh * 0.22   # mỏng theo chiều ngang
-		#var cam_h = bh * 0.38
-		#var cam_pos = Vector2(
-			#center.x + bw * 0.5,                    # sát cạnh phải thân
-			#center.y - cam_h * 0.5                  # căn giữa theo chiều dọc
-		#)
-		#var cam_rect = Rect2(cam_pos, Vector2(cam_w, cam_h))
-		#draw_rect(cam_rect, Color(0.043, 0.047, 0.063))
-		#_draw_rect_border(cam_rect, Color(ACC, 0.70), 0.8)
-		## Lens
-		#var lens_center = cam_pos + Vector2(cam_w * 0.5, cam_h * 0.5)
-		#draw_circle(lens_center, cam_h * 0.28, Color(ACC, 0.45))
-		#draw_circle(lens_center, cam_h * 0.14, Color(ACC, 0.85))
-#
-		## Center LED
-		#draw_circle(center, 3.5, Color(ACC, 0.90))
-		#draw_circle(center, 2.0, Color(0.925, 0.929, 0.961, 0.95))
-#
-	## Vẽ 1 cánh quạt dạng lá (ellipse dẹt, 2 đầu nhọn)
-	#func _draw_propeller_blade(motor_center: Vector2, angle: float, length: float, width: float):
-		#var points = PackedVector2Array()
-		#var steps  = 12
-		#for i in range(steps + 1):
-			#var t   = float(i) / float(steps)
-			## Tạo hình ellipse dọc theo trục angle
-			## x theo trục cánh: từ -length đến +length
-			## y vuông góc: sin curve tạo độ phồng giữa, nhọn 2 đầu
-			#var lx  = (t * 2.0 - 1.0) * length          # -length .. +length
-			#var ly  = sin(t * PI) * width                # 0 → width → 0 (1 phía)
-			## Rotate theo angle
-			#var px  = lx * cos(angle) - ly * sin(angle) + motor_center.x
-			#var py  = lx * sin(angle) + ly * cos(angle) + motor_center.y
-			#points.append(Vector2(px, py))
-		## Phía dưới cánh (mirror)
-		#for i in range(steps + 1):
-			#var t   = 1.0 - float(i) / float(steps)
-			#var lx  = (t * 2.0 - 1.0) * length
-			#var ly  = -sin(t * PI) * width
-			#var px  = lx * cos(angle) - ly * sin(angle) + motor_center.x
-			#var py  = lx * sin(angle) + ly * cos(angle) + motor_center.y
-			#points.append(Vector2(px, py))
-		#draw_colored_polygon(points, Color(ACC, 0.45))
-		## Outline cánh
-		#draw_polyline(points, Color(ACC, 0.65), 0.7)
-#
-	#func _draw_rect_border(r: Rect2, col: Color, width: float):
-		#var p = r.position; var s = r.size
-		#draw_line(p,                     p + Vector2(s.x, 0), col, width)
-		#draw_line(p + Vector2(s.x, 0),   p + s,               col, width)
-		#draw_line(p + s,                 p + Vector2(0, s.y), col, width)
-		#draw_line(p + Vector2(0, s.y),   p,                   col, width)
-#
-	#func _draw_hud_box(pos: Vector2, text: String):
-		#var bw = 58.0; var bh = 18.0
-		#var r  = Rect2(pos, Vector2(bw, bh))
-		#draw_line(r.position,                   r.position + Vector2(bw, 0),  Color(ACC, 0.28), 0.8)
-		#draw_line(r.position + Vector2(bw, 0),  r.position + Vector2(bw, bh), Color(ACC, 0.28), 0.8)
-		#draw_line(r.position + Vector2(bw, bh), r.position + Vector2(0, bh),  Color(ACC, 0.28), 0.8)
-		#draw_line(r.position + Vector2(0, bh),  r.position,                   Color(ACC, 0.28), 0.8)
-#
-	#func _bezier_points(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, steps: int) -> Array:
-		#var result = []
-		#for i in range(steps + 1):
-			#var t  = float(i) / float(steps)
-			#var mt = 1.0 - t
-			#result.append(mt*mt*mt*p0 + 3*mt*mt*t*p1 + 3*mt*t*t*p2 + t*t*t*p3)
-		#return result
+
 # ══ Inner class: Drone graphic (redesigned) ═══════════════════════
 class _DroneDraw extends Control:
 	const ACC     = Color(0.188, 0.502, 0.957)

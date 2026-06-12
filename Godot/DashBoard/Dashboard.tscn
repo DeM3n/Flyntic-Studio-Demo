@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://dbvhblhvlqc5c"]
+
+[ext_resource type="Script" uid="uid://cydf8t13usyi5" path="res://DashBoard/DashBoard.gd" id="1_he8lk"]
+
+[node name="Dashboard" type="Control" unique_id=316492730]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1_he8lk")

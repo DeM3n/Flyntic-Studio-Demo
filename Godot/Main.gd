@@ -233,6 +233,16 @@ func _ready():
 	_create_hier_toggle()
 	_setup_file_buttons()
 	_setup_comp_search()
+	#=====================
+	if ProjectState.pending_path != "":
+		_read_project(ProjectState.pending_path)
+		ProjectState.pending_path = ""
+	elif ProjectState.pending_name != "":
+		_on_new()
+		# auto save vào user://projects/
+		var path := "user://projects/" + ProjectState.pending_name + ".flyntic"
+		_write_project(path)
+		ProjectState.pending_name = ""
 	_log("Flyntic Studio initialized", "success")
 
 
@@ -2808,6 +2818,28 @@ func _write_project(path: String):
 	file.store_string(JSON.stringify(data, "\t"))
 	file.close()
 	_log("Saved: " + path.get_file(), "success")
+	_register_project(path)
+
+func _register_project(path: String) -> void:
+	var index_path := "user://projects_index.json"
+	var paths: Array = []
+	
+	# Đọc index cũ
+	if FileAccess.file_exists(index_path):
+		var rf := FileAccess.open(index_path, FileAccess.READ)
+		var json := JSON.new()
+		if json.parse(rf.get_as_text()) == OK:
+			paths = json.data
+		rf.close()
+	
+	# Thêm nếu chưa có
+	if path not in paths:
+		paths.append(path)
+	
+	# Ghi lại
+	var f := FileAccess.open(index_path, FileAccess.WRITE)
+	f.store_string(JSON.stringify(paths))
+	f.close()
 
 func _read_project(path: String):
 	_current_path = path
@@ -2829,6 +2861,7 @@ func _read_project(path: String):
 	if data.has("blocks"):       _deserialize_blocks(data.blocks)
 	_update_all()
 	_log("Opened: " + path.get_file(), "success")
+	_register_project(path)
 
 # ── Serialize ──────────────────────────────────────────────────────
 func _serialize_3d() -> Dictionary:

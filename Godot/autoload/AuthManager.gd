@@ -42,6 +42,7 @@ func _load_session():
 		refresh_token = data.get("refresh_token", "")
 		user_email    = data.get("email", "")
 		user_name     = data.get("name", "")
+	_sync_to_project_state()
 
 func has_session() -> bool:
 	return access_token != ""
@@ -76,7 +77,6 @@ func _on_login_done(_result, _code, _headers, body):
 	print("=== _on_login_done called")
 
 	var data = JSON.parse_string(body.get_string_from_utf8())
-	print("=== parsed data: ", data)
 	print("=== success field: ", data.get("success", "KEY NOT FOUND") if data else "data is NULL")
 	if data == null or not data.get("success", false):
 		emit_signal("login_failed", data.get("reason", "Login failed"))
@@ -87,6 +87,7 @@ func _on_login_done(_result, _code, _headers, body):
 	user_name     = data.get("name", "")
 	_save_session()
 	check_license()
+	_sync_to_project_state()
 	#if AuthManager.has_session():
 		#AuthManager.check_license_cached()
 
@@ -203,7 +204,11 @@ func _on_redeem_done(_r, _code, _h, body):
 	refresh_token = data.get("refresh_token", "")
 	_save_session()
 	check_license()
+	_sync_to_project_state()
+
+
 const CACHE_TTL_SECONDS = 3600  # cache 1 tiếng
+
 
 func check_license_cached():
 	print("=== check_license_cached() CALLED ===")
@@ -262,3 +267,6 @@ func _refresh_license_background():
 		],
 		HTTPClient.METHOD_POST, "{}"
 	)
+func _sync_to_project_state():
+	ProjectState.user_email = user_email
+	ProjectState.user_name  = user_name
