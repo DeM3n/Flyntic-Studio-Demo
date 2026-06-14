@@ -462,11 +462,14 @@ func _on_register_pressed():
 	# Thay bằng URL trang đăng ký của bạn
 	# Thêm ?redirect=flyntic://auth hoặc bất kỳ scheme nào bạn đã đăng ký
 	OS.shell_open("https://flyntic.site/en/auth/register?source=godot")
-
+var _dashboard_loaded := false 
 func _on_granted(tier: String, tier_name: String, days_left: int):
 	#print("=== GRANTED: ", tier, " / ", tier_name, " / ", days_left)
 	#get_tree().change_scene_to_file("res://Main.tscn")
 	ProjectState.tier_name = tier if tier != "" else "trial"
+	if _dashboard_loaded:
+		return  # ← bỏ qua nếu đã load rồi
+	_dashboard_loaded = true
 	get_tree().change_scene_to_file("res://DashBoard/Dashboard.tscn") 
 
 func _on_denied(reason: String):
