@@ -12,9 +12,6 @@ func _ready():
 	if popup.get_item_count() == 0:
 		popup.add_item("Welcome")
 		popup.add_item("Show All Commands")
-		popup.add_item("Editor Playground")
-		popup.add_item("Open Walkthrough...")
-		popup.add_item("Provide Feedback")
 		popup.add_separator()
 		popup.add_item("View License")
 		popup.add_item("Toggle Developer Tools")

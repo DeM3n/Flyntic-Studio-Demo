@@ -659,13 +659,12 @@ func _spawn_editor_window(title: String) -> void:
 	var win := Window.new()
 	win.title = title
 	# Dùng đúng size của màn hình hiện tại
-	win.size = DisplayServer.window_get_size()
+	win.size = get_window().size
 	win.min_size = Vector2i(800, 500)
 	win.wrap_controls = true
 	win.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
-	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
-	win.always_on_top = false
-	win.exclusive = false    
+
+
 	get_tree().root.add_child(win)
 	# Phải add child TRƯỚC khi popup để node có đúng viewport
 		# Thêm ColorRect đen làm background
@@ -678,6 +677,7 @@ func _spawn_editor_window(title: String) -> void:
 	win.add_child(main_scene)
 	# Gọi sau khi add để Main._ready() đã chạy xong
 	await get_tree().process_frame
+	win.mode = Window.MODE_MAXIMIZED
 	win.popup_centered()
 	ProjectState.open_window_count += 1
 	win.close_requested.connect(func():

@@ -41,10 +41,13 @@ func _ready():
 		 "desc":"1. Canvas → build shape\n2. Blocks → program behaviour\n3. Wiring → connect circuit\nPress Help anytime to replay this guide.",
 		 "target":null},
 	]
-
+	if ProjectState.is_tutorial_seen():
+		hide_tutorial()
+		return
 	show_step()
 
 func hide_tutorial():
+	ProjectState.mark_tutorial_seen()
 	self.visible = false
 	dark_bg.visible = false
 	highlight.visible = false

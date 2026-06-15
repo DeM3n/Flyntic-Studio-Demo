@@ -190,6 +190,9 @@ var trash_panel: Panel = null
 
 # ──────────────────────────── INIT ────────────────────────────────
 func _ready():
+	$Root.rotation = 0.0
+	$Root/TopBar.size_flags_horizontal = Control.SIZE_FILL
+	$Root/StatusBar.size_flags_horizontal = Control.SIZE_FILL
 	print($Root/Content/CenterRight/Center.get_children())
 	_setup_hud()
 	_build_comp_list()
@@ -233,6 +236,7 @@ func _ready():
 	_create_hier_toggle()
 	_setup_file_buttons()
 	_setup_comp_search()
+
 	#=====================
 	if ProjectState.pending_path != "":
 		_read_project(ProjectState.pending_path)
@@ -244,8 +248,53 @@ func _ready():
 		_write_project(path)
 		ProjectState.pending_name = ""
 	_log("Flyntic Studio initialized", "success")
+	#_print_layout_debug()
+	_fix_responsive_layout()
+	_fix_right_panel_labels()
 
 
+
+func _fix_right_panel_labels() -> void:
+	var hbox_paths = [
+		"Root/Content/CenterRight/Right/Scroll/V/Perf/Weight",
+		"Root/Content/CenterRight/Right/Scroll/V/Perf/Thrust",
+		"Root/Content/CenterRight/Right/Scroll/V/Perf/TWR",
+		"Root/Content/CenterRight/Right/Scroll/V/Perf/Capability",
+		"Root/Content/CenterRight/Right/Scroll/V/Power/Battery",
+		"Root/Content/CenterRight/Right/Scroll/V/Power/FlightTime",
+	]
+	for path in hbox_paths:
+		var hbox = get_node(path)
+		if not hbox:
+			continue
+		var l = hbox.get_node("L")
+		var val = hbox.get_node("Val")
+		if l and val:
+			# L chỉ chiếm vừa đủ text, không EXPAND nữa
+			l.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			l.custom_minimum_size = Vector2(155, 0)  # ← chỉnh số này cho vừa
+			# Val lấy phần còn lại
+			val.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+#===debug
+func _print_layout_debug() -> void:
+	var nodes = {
+		"Root": $Root,
+		"Content": $Root/Content,
+		"Left": $Root/Content/Left,
+		"CenterRight": $Root/Content/CenterRight,
+		"Right": $Root/Content/CenterRight/Right,
+		"TopBar": $Root/TopBar,
+		"StatusBar": $Root/StatusBar,
+	}
+	for key in nodes:
+		var n = nodes[key]
+		print("[%s] type=%s | anchor=(%s,%s,%s,%s) | offset=(%s,%s,%s,%s) | size=%s" % [
+			key, n.get_class(),
+			n.anchor_left, n.anchor_top, n.anchor_right, n.anchor_bottom,
+			n.offset_left, n.offset_top, n.offset_right, n.offset_bottom,
+			n.size
+		])
 func _init_bridge():
 	var bridge_script = load("res://PhysicsBridge.gd")
 	if bridge_script == null:
@@ -780,8 +829,10 @@ func _build_grid():
 		lz.position = Vector3(float(i), 0.005, 0)
 		scene_root.add_child(lz)
 
+
 # ──────────────────────────── INPUT ───────────────────────────────
 func _input(event):
+
 	if $Root/TutorialOverlay.visible:
 		return
 	# CRITICAL: Ignore 3D interactions if we are not ở Canvas tab hoặc đang simulation
@@ -2079,55 +2130,7 @@ func _on_hier_mouse_exited():
 
 #============COMPONENT LIST===============
 var _cat_collapsed: Dictionary = {}  # track trạng thái collapsed của từng category
-#func _build_comp_list():
-		## Category header — thêm margin trên bằng cách prefix newline nếu không phải cat đầu tiên
-#
-	#comp_list.clear()
-	#for cat in CATEGORIES:
-		## Lọc items trong category theo search + filter
-		#var visible_items: Array = []
-		#for cid in CATEGORIES[cat]:
-			#if not COMPONENTS.has(cid):
-				#continue
-			#var c = COMPONENTS[cid]
-			## Check filter type (nếu có filter thì kiểm tra, không thì pass)
-			#if _active_filters.size() > 0:
-				#if not c.type.to_lower() in _active_filters:
-					#continue
-			## Check search text
-			#if _search_text != "" and not cid.to_lower().contains(_search_text):
-				#continue
-			#visible_items.append(cid)
-#
-		## Khi đang search/filter: bỏ qua category rỗng, không cần header collapse
-		#var is_filtering = _search_text != "" or _active_filters.size() > 0
-		#if is_filtering:
-			#if visible_items.is_empty():
-				#continue
-			## Hiện category header đơn giản, không collapse
-			#var ci = comp_list.add_item("  " + cat)
-			#comp_list.set_item_selectable(ci, false)
-			#comp_list.set_item_metadata(ci, {"is_category": true, "cat": cat})
-			#comp_list.set_item_custom_fg_color(ci, Color(0.75, 0.75, 0.75))
-		#else:
-			#var collapsed = _cat_collapsed.get(cat, false)
-			#var arrow = "▾ " if not collapsed else "▸ "
-			#var ci = comp_list.add_item(arrow + cat)
-			#comp_list.set_item_selectable(ci, true)
-			#comp_list.set_item_metadata(ci, {"is_category": true, "cat": cat})
-			#comp_list.set_item_custom_fg_color(ci, Color(0.75, 0.75, 0.75))
-			#if collapsed:
-				#continue  # bỏ qua items nếu collapsed
-#
-		#for cid in visible_items:
-			#var ii = comp_list.add_item("   " + cid)
-			#comp_list.set_item_metadata(ii, {"is_category": false, "id": cid})
-			#var c = COMPONENTS[cid]
-			#match c.type:
-				#"Motor":    comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.4, 0.4))
-				#"Battery":  comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.8, 0.2))
-				#"Frame":    comp_list.set_item_custom_fg_color(ii, Color(0.7, 0.7, 0.7))
-				#_:          comp_list.set_item_custom_fg_color(ii, Color(0.6, 0.7, 0.8))
+
 func _build_comp_list():
 	comp_list.clear()
 	var is_first_cat = true
@@ -2184,14 +2187,16 @@ func _setup_comp_search():
 	# Tạo HBox chứa search + filter
 	var hbox = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 4)
-	
+	var left_pad = Control.new()
+	left_pad.custom_minimum_size = Vector2(4, 0)  # ← đẩy sang phải 8px
+	hbox.add_child(left_pad)
 	# Tạo LineEdit
 	var sbox = LineEdit.new()
 	sbox.placeholder_text = "Search component..."
 	sbox.clear_button_enabled = true
 	sbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sbox.add_theme_font_size_override("font_size", 12) 
-	sbox.custom_minimum_size = Vector2(0, 24)  # ← thêm
+	sbox.custom_minimum_size = Vector2(0, 22)  # ← thêm
 	hbox.add_child(sbox)
 	
 	# Tạo MenuButton
@@ -2234,194 +2239,6 @@ func _setup_comp_search():
 		_build_comp_list()
 	)
 
-
-#func _pick_existing():
-	#var mpos = viewport.get_mouse_position()
-	#var ro = camera.project_ray_origin(mpos)
-	#var rd = camera.project_ray_normal(mpos)
-	#
-	#var best_uid := -1
-	#var best_d := 1000.0
-	#
-	#for c in placed:
-		#if not is_instance_valid(c.node): continue
-		#if c.type == "Frame": continue
-		#var to_node = c.node.global_position - ro
-		#var projection = to_node.dot(rd)
-		#if projection > 0:
-			#var closest_point = ro + rd * projection
-			#var dist = closest_point.distance_to(c.node.global_position)
-			#if dist < 1.0 and dist < best_d:
-				#best_d = dist
-				#best_uid = c.uid
-	#
-	#if best_uid == -1:
-		#return
-	#
-	## Tìm motor entry
-	#var motor_entry = null
-	#var motor_idx = -1
-	#for i in range(placed.size()):
-		#if placed[i].uid == best_uid:
-			#motor_entry = placed[i]
-			#motor_idx = i
-			#break
-	#
-	#if motor_entry == null:
-		#return
-	#
-	#cur_id = motor_entry.id
-	#_ghost_children.clear()
-	#
-	## Thu thập children + offset (dùng local position để không phụ thuộc world transform)
-	#var children_indices: Array[int] = []
-	#for j in range(placed.size()):
-		#var candidate = placed[j]
-		#if candidate.get("parent_id", -1) != best_uid:
-			#continue
-		#var local_offset = Vector3.ZERO
-		#if is_instance_valid(candidate.get("node")) and is_instance_valid(motor_entry.node):
-			#local_offset = motor_entry.node.global_transform.affine_inverse() * candidate.node.global_position
-		#_ghost_children.append({
-			#"id": candidate.id,
-			#"local_offset": local_offset,
-			#"port_name": candidate.get("port_name", ""),
-		#})
-		#children_indices.append(j)
-	#
-	## Xóa children khỏi placed (không free node — sẽ bị free theo motor)
-	#children_indices.sort()
-	#children_indices.reverse()
-	#for idx in children_indices:
-		#placed.remove_at(idx)
-	#
-	## Xóa motor khỏi placed
-	## Phải điều chỉnh motor_idx vì đã remove children ở trên
-	## Tìm lại motor_idx sau khi xóa children
-	#motor_idx = -1
-	#for i in range(placed.size()):
-		#if placed[i].uid == best_uid:
-			#motor_idx = i
-			#break
-	#if motor_idx != -1:
-		#placed.remove_at(motor_idx)
-	#
-	## Tạo ghost mới
-	#ghost = _build_mesh(cur_id, true)
-	#components_group.add_child(ghost)
-	#
-	## Free node motor (children node là con của motor node nên bị free theo — đúng)
-	#if is_instance_valid(motor_entry.node):
-		#motor_entry.node.queue_free()
-	#
-	#_show_snap_hints(cur_id)
-	#
-	## Tạo ghost visual cho children
-	#for child_info in _ghost_children:
-		#var child_ghost = _build_mesh(child_info.id, true)
-		#ghost.add_child(child_ghost)
-		#child_ghost.position = child_info.local_offset
-	#
-	#_rebuild_wires()
-	#_update_all()
-
-#func _pick_existing():
-	#var mpos = viewport.get_mouse_position()
-	#var ro = camera.project_ray_origin(mpos)
-	#var rd = camera.project_ray_normal(mpos)
-#
-	#var best_uid := -1
-	#var best_d := 1000.0
-	#var is_frame := false
-#
-	#for c in placed:
-		#if not is_instance_valid(c.node): continue
-		#var to_node = c.node.global_position - ro
-		#var projection = to_node.dot(rd)
-		#if projection > 0:
-			#var closest_point = ro + rd * projection
-			#var dist = closest_point.distance_to(c.node.global_position)
-			## Frame thường lớn hơn nên dùng threshold rộng hơn
-			#var threshold = 2.5 if c.type == "Frame" else 1.0
-			#if dist < threshold and dist < best_d:
-				#best_d = dist
-				#best_uid = c.uid
-				#is_frame = c.type == "Frame"
-#
-	#if best_uid == -1:
-		#return
-#
-	#var picked_entry = null
-	#var picked_idx = -1
-	#for i in range(placed.size()):
-		#if placed[i].uid == best_uid:
-			#picked_entry = placed[i]
-			#picked_idx = i
-			#break
-#
-	#if picked_entry == null:
-		#return
-#
-	#cur_id = picked_entry.id
-	#_ghost_children.clear()
-#
-	## Thu thập children + offset
-	#var children_indices: Array[int] = []
-	#for j in range(placed.size()):
-		#var candidate = placed[j]
-		#if candidate.get("parent_id", -1) != best_uid:
-			#continue
-		#var local_offset = Vector3.ZERO
-		#if is_instance_valid(candidate.get("node")) and is_instance_valid(picked_entry.node):
-			#local_offset = picked_entry.node.global_transform.affine_inverse() * candidate.node.global_position
-		#_ghost_children.append({
-			#"id": candidate.id,
-			#"local_offset": local_offset,
-			#"port_name": candidate.get("port_name", ""),
-		#})
-		#children_indices.append(j)
-#
-	#children_indices.sort()
-	#children_indices.reverse()
-	#for idx in children_indices:
-		#placed.remove_at(idx)
-#
-	## Tìm lại picked_idx sau khi remove children
-	#picked_idx = -1
-	#for i in range(placed.size()):
-		#if placed[i].uid == best_uid:
-			#picked_idx = i
-			#break
-	#if picked_idx != -1:
-		#placed.remove_at(picked_idx)
-#
-	## Tạo ghost
-	#ghost = _build_mesh(cur_id, true)
-	#components_group.add_child(ghost)
-#
-	## Free node + dọn drone_root nếu là Frame
-	#if is_instance_valid(picked_entry.node):
-		#picked_entry.node.queue_free()
-#
-	#if is_frame and drone_root != null:
-			## Reparent wires_group ra ngoài TRƯỚC khi free drone_root
-		#if is_instance_valid(wires_group) and wires_group.get_parent() == drone_root:
-			#drone_root.remove_child(wires_group)
-			#components_group.add_child(wires_group)
-		## Children của drone_root (motors, v.v.) đã bị queue_free theo frame node
-		## Xóa drone_root, sẽ tạo lại khi place Frame mới
-		#drone_root.queue_free()
-		#drone_root = null
-#
-	#_show_snap_hints(cur_id)
-#
-	#for child_info in _ghost_children:
-		#var child_ghost = _build_mesh(child_info.id, true)
-		#ghost.add_child(child_ghost)
-		#child_ghost.position = child_info.local_offset
-#
-	#_rebuild_wires()
-	#_update_all()y
 func _pick_existing():
 	var mpos = viewport.get_mouse_position()
 	var ro = camera.project_ray_origin(mpos)
@@ -2969,3 +2786,22 @@ func _recheck_license():
 func _on_license_revoked(reason: String):
 	# Kick về login
 	get_tree().change_scene_to_file("res://Auth/Login.tscn")
+
+func _fix_responsive_layout() -> void:
+	# 1. TopBar và StatusBar cần FILL ngang
+	$Root/TopBar.size_flags_horizontal = Control.SIZE_FILL
+	$Root/StatusBar.size_flags_horizontal = Control.SIZE_FILL
+	# 2. Split offset theo tỉ lệ màn hình thay vì pixel cứng
+	var vp_width = get_viewport().get_visible_rect().size.x
+	# Left panel: 20% màn hình, tối thiểu 200px, tối đa 280px
+	var left_width = clamp(vp_width * 0.20, 200, 280)
+	$Root/Content.split_offset = int(left_width)
+	# Right panel: 18% màn hình, tối thiểu 180px, tối đa 260px  
+	var right_width = clamp(vp_width * 0.18, 180, 260)
+	$Root/Content/CenterRight.split_offset = -int(right_width)
+	# 3. Search box: đảm bảo không bị clip
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_SIZE_CHANGED:
+		_fix_responsive_layout()
