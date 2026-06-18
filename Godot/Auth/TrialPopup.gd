@@ -10,7 +10,7 @@ func _ready():
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	AuthManager.access_granted.connect(
 		func(_tier, _tier_name, _days_left):
-			AuthManager.get_tree().change_scene_to_file("res://Main.tscn"),
+			AuthManager.get_tree().change_scene_to_file("res://DashBoard/Dashboard.tscn"),
 		CONNECT_ONE_SHOT
 	)
 

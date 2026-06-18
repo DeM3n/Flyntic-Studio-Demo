@@ -9,7 +9,10 @@ var empty_label: Label
 var modal_overlay: Control
 var new_name_input: LineEdit
 var section_label: Label
-
+var confirm_btn: Button
+var preview_label: Label
+var loc_label: Label
+static var _bold_font_cache: FontVariation
 # ── Colors ──────────────────────────────────────────────────────
 const C_BG_DARK    := Color(0.13, 0.13, 0.13)
 const C_BG_SIDEBAR := Color(0.17, 0.17, 0.17)
@@ -28,7 +31,12 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	_scan_projects()
-
+#------------ FONT ĐẬM --------------
+static func _get_bold_font() -> FontVariation:
+	if _bold_font_cache == null:
+		_bold_font_cache = FontVariation.new()
+		_bold_font_cache.set_variation_embolden(1.0)
+	return _bold_font_cache
 # ── Styleboxes ──────────────────────────────────────────────────
 func _flat(color: Color, radius: int = 0) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
@@ -115,47 +123,7 @@ func _build_sidebar() -> Control:
 	nav_pad.add_child(nav_vbox)
 	vbox.add_child(nav_pad)
 
-	#for item in nav_items:
-		#var btn := Button.new()
-		#btn.text = ""
-		#btn.flat = false
-		#btn.focus_mode = Control.FOCUS_NONE
-		#btn.custom_minimum_size = Vector2(0, 44)
-		#btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		#btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		#if item[1]:
-			#btn.add_theme_stylebox_override("normal", _pad(_flat(C_BG_ACTIVE, 6), 10, 12))
-		#else:
-			#btn.add_theme_stylebox_override("normal", _pad(_flat(Color.TRANSPARENT, 6), 10, 12))
-			#btn.add_theme_stylebox_override("hover",  _pad(_flat(C_BG_HOVER, 6), 10, 12))
-		#btn.add_theme_stylebox_override("pressed", _pad(_flat(C_BG_ACTIVE, 6), 10, 12))
-		#btn.add_theme_stylebox_override("focus",   _pad(_flat(Color.TRANSPARENT), 10, 12))
-#
-		#var content_margin := MarginContainer.new()
-		#content_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		#content_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		#content_margin.add_theme_constant_override("margin_left", 12)
-		#content_margin.add_theme_constant_override("margin_right", 12)
-		#content_margin.add_theme_constant_override("margin_top", 12)
-		#content_margin.add_theme_constant_override("margin_bottom", 12)
-		#btn.add_child(content_margin)
-#
-		#var content := HBoxContainer.new()
-		#content.add_theme_constant_override("separation", 10)
-		#content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		#content_margin.add_child(content)
-#
-		#var text_color := C_TEXT if item[1] else C_TEXT_MUTED
-		#content.add_child(_make_nav_icon(item[2], text_color))
-#
-		#var lbl := Label.new()
-		#lbl.text = item[0]
-		#lbl.add_theme_font_size_override("font_size", 16)
-		#lbl.add_theme_color_override("font_color", text_color)
-		#lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		#lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		#content.add_child(lbl)
-		#nav_vbox.add_child(btn)
+
 	for item in nav_items:
 		var btn := Button.new()
 		btn.flat = false
@@ -266,18 +234,23 @@ func _build_main_area() -> Control:
 	search_input.add_theme_stylebox_override("focus",  _pad(_flat_border(C_BG_DARK, C_ACCENT, 6), 10, 6))
 	search_input.add_theme_color_override("font_color", C_TEXT)
 	search_input.add_theme_color_override("font_placeholder_color", C_TEXT_MUTED)
+	search_input.caret_blink = true
+	search_input.caret_blink_interval = 0.5
+	search_input.add_theme_color_override("caret_color", C_TEXT)
 	search_input.text_changed.connect(_on_search_changed)
 	tbar_hbox.add_child(search_input)
 
 	# Open
 	var open_btn := _make_btn("Open", false)
 	open_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	open_btn.add_theme_font_override("font", _get_bold_font())
 	open_btn.pressed.connect(_on_open_btn)
 	tbar_hbox.add_child(open_btn)
 
 	# + New project
 	var new_btn := _make_btn("+ New project", true)
 	new_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	new_btn.add_theme_font_override("font", _get_bold_font())
 	new_btn.pressed.connect(_on_new_project_btn)
 	tbar_hbox.add_child(new_btn)
 
@@ -330,6 +303,7 @@ func _build_table_header() -> Control:
 	name_lbl.text = "NAME"
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.add_theme_font_size_override("font_size", 13)
+	
 	name_lbl.add_theme_font_override("font", bold_font)
 	name_lbl.add_theme_color_override("font_color", C_TEXT_MUTED)
 	hbox.add_child(name_lbl)
@@ -351,7 +325,17 @@ func _build_table_header() -> Control:
 	ver_lbl.add_theme_font_override("font", bold_font)
 	ver_lbl.add_theme_color_override("font_color", C_TEXT_MUTED)
 	hbox.add_child(ver_lbl)
-
+	# setting action
+	var settings_btn := Button.new()
+	settings_btn.icon = load("res://Assets/settings.svg")
+	settings_btn.expand_icon = true
+	settings_btn.flat = true
+	settings_btn.focus_mode = Control.FOCUS_NONE
+	settings_btn.custom_minimum_size = Vector2(32, 32)
+	settings_btn.add_theme_color_override("icon_normal_color", C_TEXT_MUTED)
+	settings_btn.add_theme_color_override("icon_hover_color", C_TEXT)
+	settings_btn.pressed.connect(_on_settings_pressed)
+	hbox.add_child(settings_btn)
 	return pad
 
 func _make_project_row(p: Dictionary) -> Control:
@@ -430,114 +414,61 @@ func _make_project_row(p: Dictionary) -> Control:
 	ver_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(ver_lbl)
 
+	var action_btn := Button.new()
+	action_btn.icon = load("res://Assets/ellipsis-vertical.svg")
+	action_btn.expand_icon = true
+	action_btn.flat = true
+	action_btn.focus_mode = Control.FOCUS_NONE
+	action_btn.custom_minimum_size = Vector2(32, 32)
+	action_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	action_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	action_btn.add_theme_color_override("icon_normal_color", C_TEXT_MUTED)
+	action_btn.add_theme_color_override("icon_hover_color", C_TEXT)
+	hbox.add_child(action_btn)
+
+	var action_menu := PopupMenu.new()
+	action_menu.add_item("Show in Explorer", 0)
+	action_menu.add_item("Remove from list", 1)
+	action_btn.add_child(action_menu)
+
+	action_btn.pressed.connect(func():
+		action_menu.position = action_btn.get_screen_position() + Vector2(0, action_btn.size.y)
+		action_menu.popup()
+	)
+	action_menu.id_pressed.connect(func(id: int):
+		match id:
+			0: _show_in_explorer(p.path)
+			1: _remove_project_from_list(p.path, btn)
+	)
+
 	return btn
 
-# ── Modal ────────────────────────────────────────────────────────
-#func _build_modal() -> Control:
-	#var overlay := ColorRect.new()
-	#overlay.color = Color(0, 0, 0, 0.6)
-	#overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-#
-	#var panel := PanelContainer.new()
-	#panel.custom_minimum_size = Vector2(360, 0)
-	#panel.add_theme_stylebox_override("panel", _pad(_flat_border(C_BG_SIDEBAR, C_BORDER, 8), 24, 20))
-	#panel.set_anchors_preset(Control.PRESET_CENTER)
-	#overlay.add_child(panel)
-#
-	#var vbox := VBoxContainer.new()
-	#vbox.add_theme_constant_override("separation", 12)
-	#panel.add_child(vbox)
-#
-	#var title := Label.new()
-	#title.text = "Create new project"
-	#title.add_theme_font_size_override("font_size", 16)
-	#title.add_theme_color_override("font_color", C_TEXT)
-	#vbox.add_child(title)
-#
-	#var lbl := Label.new()
-	#lbl.text = "Project name"
-	#lbl.add_theme_font_size_override("font_size", 12)
-	#lbl.add_theme_color_override("font_color", C_TEXT_MUTED)
-	#vbox.add_child(lbl)
-#
-	#new_name_input = LineEdit.new()
-	#new_name_input.placeholder_text = "My Drone Project"
-	#new_name_input.custom_minimum_size = Vector2(0, 34)
-	#new_name_input.add_theme_stylebox_override("normal", _pad(_flat_border(C_BG_DARK, C_BORDER, 6), 10, 6))
-	#new_name_input.add_theme_stylebox_override("focus",  _pad(_flat_border(C_BG_DARK, C_ACCENT, 6), 10, 6))
-	#new_name_input.add_theme_color_override("font_color", C_TEXT)
-	#new_name_input.add_theme_color_override("font_placeholder_color", C_TEXT_MUTED)
-	#new_name_input.gui_input.connect(_on_modal_input)
-	#vbox.add_child(new_name_input)
-#
-	#var hbox := HBoxContainer.new()
-	#hbox.add_theme_constant_override("separation", 8)
-	#hbox.alignment = BoxContainer.ALIGNMENT_END
-	#vbox.add_child(hbox)
-#
-	#var cancel_btn := _make_btn("Cancel", false)
-	#cancel_btn.pressed.connect(_on_modal_cancel)
-	#hbox.add_child(cancel_btn)
-#
-	#var confirm_btn := _make_btn("Create", true)
-	#confirm_btn.pressed.connect(_on_modal_confirm)
-	#hbox.add_child(confirm_btn)
-#
-	#return overlay
-#func _build_modal() -> Control:
-	#var overlay := ColorRect.new()
-	#overlay.color = Color(0, 0, 0, 0.6)
-	#overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	#overlay.mouse_filter = Control.MOUSE_FILTER_STOP  # chặn click xuyên qua
- #
-	## ── FIX: dùng CenterContainer thay vì set_anchors_preset trực tiếp ──
-	#var center := CenterContainer.new()
-	#center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	#overlay.add_child(center)
- #
-	#var panel := PanelContainer.new()
-	#panel.custom_minimum_size = Vector2(360, 0)
-	#panel.add_theme_stylebox_override("panel", _pad(_flat_border(C_BG_SIDEBAR, C_BORDER, 8), 24, 20))
-	#center.add_child(panel)  # ← add vào center, không phải overlay
- #
-	#var vbox := VBoxContainer.new()
-	#vbox.add_theme_constant_override("separation", 12)
-	#panel.add_child(vbox)
- #
-	#var title := Label.new()
-	#title.text = "Create new project"
-	#title.add_theme_font_size_override("font_size", 16)
-	#title.add_theme_color_override("font_color", C_TEXT)
-	#vbox.add_child(title)
- #
-	#var lbl := Label.new()
-	#lbl.text = "Project name"
-	#lbl.add_theme_font_size_override("font_size", 12)
-	#lbl.add_theme_color_override("font_color", C_TEXT_MUTED)
-	#vbox.add_child(lbl)
- #
-	#new_name_input = LineEdit.new()
-	#new_name_input.placeholder_text = "My Drone Project"
-	#new_name_input.custom_minimum_size = Vector2(0, 34)
-	#new_name_input.add_theme_stylebox_override("normal", _pad(_flat_border(C_BG_DARK, C_BORDER, 6), 10, 6))
-	#new_name_input.add_theme_stylebox_override("focus",  _pad(_flat_border(C_BG_DARK, C_ACCENT, 6), 10, 6))
-	#new_name_input.add_theme_color_override("font_color", C_TEXT)
-	#new_name_input.add_theme_color_override("font_placeholder_color", C_TEXT_MUTED)
-	#new_name_input.gui_input.connect(_on_modal_input)
-	#vbox.add_child(new_name_input)
- #
-	#var hbox := HBoxContainer.new()
-	#hbox.add_theme_constant_override("separation", 8)
-	#hbox.alignment = BoxContainer.ALIGNMENT_END
-	#vbox.add_child(hbox)
- #
-	#var cancel_btn := _make_btn("Cancel", false)
-	#cancel_btn.pressed.connect(_on_modal_cancel)
-	#hbox.add_child(cancel_btn)
-	#var confirm_btn := _make_btn("Create", true)
-	#confirm_btn.pressed.connect(_on_modal_confirm)
-	#hbox.add_child(confirm_btn)
-	#return overlay
+func _on_settings_pressed() -> void:
+	# TODO: mở settings panel/dialog của app ở đây
+	pass
+
+func _show_in_explorer(path: String) -> void:
+	var abs_path := ProjectSettings.globalize_path(path)
+	if OS.has_method("shell_show_in_file_manager"):
+		OS.shell_show_in_file_manager(abs_path)
+	else:
+		OS.shell_open(abs_path.get_base_dir())
+
+func _remove_project_from_list(path: String, row: Control) -> void:
+	var f := FileAccess.open("user://projects_index.json", FileAccess.READ)
+	if f == null:
+		return
+	var data = JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(data) != TYPE_ARRAY:
+		return
+
+	data.erase(path)
+
+	var fw := FileAccess.open("user://projects_index.json", FileAccess.WRITE)
+	fw.store_string(JSON.stringify(data))
+	fw.close()
+	row.queue_free()
 
 # ── Helpers ──────────────────────────────────────────────────────
 func _make_btn(text: String, primary: bool) -> Button:
@@ -594,18 +525,21 @@ func _scan_projects() -> void:
 	_render_projects(_all_projects)
 
 func _render_projects(list: Array) -> void:
+	if empty_label.get_parent():
+		empty_label.get_parent().remove_child(empty_label)
 	for child in projects_container.get_children():
+		projects_container.remove_child(child)
 		child.queue_free()
 
 	if list.is_empty():
 		var pad := MarginContainer.new()
 		pad.add_theme_constant_override("margin_top", 40)
 		pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		if empty_label.get_parent() != null and empty_label.get_parent() != projects_container:
-			empty_label.get_parent().queue_free()
+		#if empty_label.get_parent() != null and empty_label.get_parent() != projects_container:
+			#empty_label.get_parent().queue_free()
 		projects_container.add_child(pad)
 		pad.add_child(empty_label)
-		empty_label.visible = true
+		#empty_label.visible = true
 		return
 	for p in list:
 		projects_container.add_child(_make_project_row(p))
@@ -613,6 +547,9 @@ func _render_projects(list: Array) -> void:
 
 # ── Actions ──────────────────────────────────────────────────────
 func _on_search_changed(q: String) -> void:
+	if q.is_empty():
+		_render_projects(_all_projects)
+		return
 	var filtered := _all_projects.filter(func(p): return p.name.to_lower().contains(q.to_lower()))
 	_render_projects(filtered)
 
@@ -630,6 +567,7 @@ func _on_new_project_btn() -> void:
 	#get_tree().change_scene_to_file("res://Main.tscn")
 
 func _on_modal_cancel() -> void:
+	_reset_modal_fields()
 	modal_overlay.hide()
 
 func _on_modal_input(event: InputEvent) -> void:
@@ -663,8 +601,6 @@ func _spawn_editor_window(title: String) -> void:
 	win.min_size = Vector2i(800, 500)
 	win.wrap_controls = true
 	win.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
-
-
 	get_tree().root.add_child(win)
 	# Phải add child TRƯỚC khi popup để node có đúng viewport
 		# Thêm ColorRect đen làm background
@@ -692,34 +628,6 @@ func _open_project(path: String) -> void:
 	ProjectState.pending_path = path
 	ProjectState.pending_name = ""
 	_spawn_editor_window("Flyntic Studio — " + path.get_file().get_basename())
-
-#func _on_modal_confirm() -> void:
-	#var proj_name := new_name_input.text.strip_edges()
-	#if proj_name.is_empty():
-		#return
-	#modal_overlay.hide()
-	#if ProjectState.open_window_count >= 1:
-		#_show_limit_dialog()
-		#return
-	#ProjectState.pending_name = proj_name
-	#ProjectState.pending_path = ""
-	#_spawn_editor_window("Flyntic Studio — " + proj_name)
-#func _on_modal_confirm() -> void:
-	#var proj_name := new_name_input.text.strip_edges()
-	#if proj_name.is_empty():
-		#return
-	#modal_overlay.hide()
-	#if ProjectState.open_window_count >= 1:
-		#_show_limit_dialog()
-		#return
-	## ── Ghi vào index TRƯỚC khi spawn window ──
-	#var path := "user://projects/" + proj_name + ".flyntic"
-	#_register_project_to_index(path)
-	#ProjectState.pending_name = proj_name
-	#ProjectState.pending_path = ""
-	#_spawn_editor_window("Flyntic Studio — " + proj_name)
-	## ── Refresh danh sách ngay lập tức ──
-	#_scan_projects()
 
 
 func _register_project_to_index(path: String) -> void:
@@ -838,7 +746,7 @@ func _build_modal() -> Control:
 	vbox.add_child(loc_row)
 
 	# Label hiển thị path — lưu ref để update sau
-	var loc_label := Label.new()
+	loc_label = Label.new()
 	loc_label.name = "LocationLabel"
 	loc_label.text = _get_default_dir()
 	loc_label.clip_text = true
@@ -860,17 +768,13 @@ func _build_modal() -> Control:
 	loc_row.add_child(browse_btn)
 
 	# ── Preview full path ──
-	var preview_label := Label.new()
+	preview_label = Label.new()
 	preview_label.name = "PreviewLabel"
 	preview_label.add_theme_font_size_override("font_size", 10)
 	preview_label.add_theme_color_override("font_color", C_TEXT_MUTED)
 	preview_label.clip_text = true
 	vbox.add_child(preview_label)
 
-	# Update preview khi gõ tên
-	new_name_input.text_changed.connect(func(txt):
-		_update_preview(preview_label, loc_label.text, txt)
-	)
 	_update_preview(preview_label, loc_label.text, "")
 
 	# ── Buttons ──
@@ -883,12 +787,23 @@ func _build_modal() -> Control:
 	cancel_btn.pressed.connect(_on_modal_cancel)
 	hbox.add_child(cancel_btn)
 
-	var confirm_btn := _make_btn("Create", true)
+	confirm_btn = _make_btn("Create", true)
+	confirm_btn.disabled = true
 	confirm_btn.pressed.connect(_on_modal_confirm)
 	hbox.add_child(confirm_btn)
+	# Connect SAU khi confirm_btn đã tồn tại
+	new_name_input.text_changed.connect(func(txt):
+		_update_preview(preview_label, loc_label.text, txt)
+		confirm_btn.disabled = txt.strip_edges().is_empty()
+	)
 
 	return overlay
 
+func _reset_modal_fields() -> void:
+	new_name_input.text = ""
+	confirm_btn.disabled = true
+	loc_label.text = _get_default_dir()
+	_update_preview(preview_label, loc_label.text, "")
 
 # ── Mở FileDialog chọn thư mục ────────────────────────────────────────────
 func _on_browse_location(loc_label: Label) -> void:
@@ -933,10 +848,12 @@ func _get_default_dir() -> String:
 func _on_modal_confirm() -> void:
 	var proj_name := new_name_input.text.strip_edges()
 	if proj_name.is_empty():
+		new_name_input.grab_focus()
+		new_name_input.add_theme_stylebox_override("normal", _pad(_flat_border(C_BG_DARK, Color.RED, 6), 10, 6))
 		return
 
 	# Lấy dir: ưu tiên người dùng chọn, fallback về default
-	var loc_label = modal_overlay.find_child("LocationLabel", true, false)
+	loc_label = modal_overlay.find_child("LocationLabel", true, false)
 	var save_dir: String = _selected_dir
 	if save_dir.is_empty():
 		save_dir = loc_label.text if loc_label else _get_default_dir()
