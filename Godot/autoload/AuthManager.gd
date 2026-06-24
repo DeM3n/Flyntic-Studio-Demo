@@ -12,7 +12,8 @@ var access_token  := ""
 var refresh_token := ""
 var user_email    := ""
 var user_name     := ""
-
+var tier      := ""
+var tier_name := ""
 func _ready():
 	if not ProjectSettings.get_setting("flyntic/url_scheme_registered", false):
 		_register_url_scheme()
@@ -119,6 +120,7 @@ func _on_license_done(_result, code, _headers, body):
 	if data.get("allowed", false):
 		# Lưu vào session kèm server_time
 		_save_session_with_license(data)
+		_sync_to_project_state()
 		emit_signal("access_granted",
 			data.get("tier", ""),
 			data.get("tier_name", ""),
@@ -235,6 +237,7 @@ func check_license_cached():
 			data.get("license_tier", ""),
 			int(data.get("days_left", 0))
 		])
+		_sync_to_project_state()
 		emit_signal("access_granted",
 			data.get("license_type", ""),
 			data.get("license_tier", ""),
@@ -258,6 +261,7 @@ func _refresh_license_background():
 		var data = JSON.parse_string(body.get_string_from_utf8())
 		if data and data.get("allowed", false):
 			_save_session_with_license(data)
+			_sync_to_project_state()
 	, CONNECT_ONE_SHOT)
 	http.request(
 		SUPABASE_URL + "/functions/v1/check-license",
@@ -270,3 +274,4 @@ func _refresh_license_background():
 func _sync_to_project_state():
 	ProjectState.user_email = user_email
 	ProjectState.user_name  = user_name
+	ProjectState.set_tier_info(tier, tier_name)

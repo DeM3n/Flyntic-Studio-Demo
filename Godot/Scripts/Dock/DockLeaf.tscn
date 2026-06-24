@@ -1,0 +1,27 @@
+[gd_scene format=3 uid="uid://ccp27x50j7fj3"]
+
+[ext_resource type="Script" uid="uid://bap7oxumoivwi" path="res://Scripts/Dock/Dockleaf.gd" id="1_nujf5"]
+
+[node name="DockLeaf" type="Control" unique_id=810145487]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_nujf5")
+
+[node name="VBox" type="VBoxContainer" parent="." unique_id=893038247]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="TabBar" type="TabBar" parent="VBox" unique_id=1090703712]
+layout_mode = 2
+
+[node name="Stack" type="Control" parent="VBox" unique_id=1778537553]
+layout_mode = 2
+size_flags_vertical = 3

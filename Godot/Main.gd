@@ -5,6 +5,9 @@ extends Control
 # ──────────────────────────── NODE REFS ────────────────────────────
 # These paths EXACTLY match Main.tscn node tree
 
+@onready var canvas_panel: Control = $Root/Content/CenterRight/Center/Tabs/Canvas 
+@onready var blocks_panel: Control = $Root/Content/CenterRight/Center/Tabs/Blocks 
+@onready var dock_manager: DockManager = $Root/Content/CenterRight/Center/Tabs/DockManager
 # Left sidebar
 @onready var comp_list: ItemList = $Root/Content/Left/CompPanel/V/CompList
 @onready var hier_tree: Tree   = $Root/Content/Left/HierarchyPanel/V/Tree
@@ -229,10 +232,24 @@ func _ready():
 	_create_block("start", "When ⚐ clicked", Color(0.85, 0.65, 0), Vector2(50, 50))
 	# Initialize physics bridge
 	_init_bridge()
-	var w2d = load("res://Wiring.gd").new()
-	w2d.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	tabs.add_child(w2d)
-	wiring_panel = w2d
+	#var w2d = load("res://Wiring.gd").new()
+	#w2d.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	#tabs.add_child(w2d)
+	#wiring_panel = w2d
+	var w2d = load("res://Wiring.gd").new() 
+	w2d.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT) 
+	wiring_panel = w2d # KHÔNG add_child(w2d) vào tabs nữa — DockManager tự xử lý 
+	dock_manager.register_panel("canvas", canvas_panel, "Canvas") 
+	dock_manager.register_panel("blocks", blocks_panel, "Blocks") 
+	dock_manager.register_panel("wiring", wiring_panel, "Wiring") 
+	if not dock_manager.load_layout(): 
+		var leaf := dock_manager.create_leaf() 
+		leaf.add_panel(canvas_panel, "Canvas", "canvas") 
+		leaf.add_panel(blocks_panel, "Blocks", "blocks")
+		leaf.add_panel(wiring_panel, "Wiring", "wiring")
+		dock_manager.root_container.add_child(leaf) 
+		
+	tabs.tabs_visible = false
 	_create_hier_toggle()
 	_setup_file_buttons()
 	_setup_comp_search()
@@ -248,7 +265,7 @@ func _ready():
 		_write_project(path)
 		ProjectState.pending_name = ""
 	_log("Flyntic Studio initialized", "success")
-	#_print_layout_debug()
+
 	_fix_responsive_layout()
 	_fix_right_panel_labels()
 

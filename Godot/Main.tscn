@@ -5,6 +5,7 @@
 [ext_resource type="Script" uid="uid://lg1j88inmrl3" path="res://User/UserMenu.gd" id="2_fos0i"]
 [ext_resource type="Script" uid="uid://b2c633c88u7wr" path="res://tutorial_overlay.gd" id="2_uu6xs"]
 [ext_resource type="Shader" uid="uid://cihs6j4ireknf" path="res://Highlight.gdshader" id="3_r0du0"]
+[ext_resource type="Script" uid="uid://dhkeer7bo06oa" path="res://Scripts/Dock/DockerManager.gd" id="4_3dxm6"]
 
 [sub_resource type="StyleBoxFlat" id="sbf_header"]
 bg_color = Color(0.09, 0.09, 0.1, 1)
@@ -556,6 +557,18 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.12, 0.12, 0.14, 1)
+
+[node name="DockManager" type="Control" parent="Root/Content/CenterRight/Center/Tabs" unique_id=1414506840]
+visible = false
+layout_mode = 2
+script = ExtResource("4_3dxm6")
+root_container_path = NodePath("RootSplit")
+metadata/_tab_index = 2
+
+[node name="RootSplit" type="Control" parent="Root/Content/CenterRight/Center/Tabs/DockManager" unique_id=31808198]
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
 
 [node name="Console" type="Panel" parent="Root/Content/CenterRight/Center" unique_id=870452651]
 layout_mode = 2

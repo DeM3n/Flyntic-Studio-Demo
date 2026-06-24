@@ -1,9 +1,11 @@
 # ProjectState.gd
 extends Node
+signal tier_updated(tier: String, tier_name: String)
 var pending_path: String = ""
 var pending_name: String = ""
 var user_email: String = ""   
-var tier_name: String = "" 
+var tier := ""
+var tier_name := ""
 var user_name: String =""
 var open_window_count: int = 0
 
@@ -21,3 +23,8 @@ func mark_tutorial_seen():
 	config.load(CONFIG_PATH)  # load trước để không ghi đè data cũ
 	config.set_value("prefs", "tutorial_seen", true)
 	config.save(CONFIG_PATH)
+
+func set_tier_info(p_tier: String, p_tier_name: String) -> void:
+	tier = p_tier
+	tier_name = p_tier_name
+	emit_signal("tier_updated", tier, tier_name)

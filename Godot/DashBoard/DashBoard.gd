@@ -12,6 +12,9 @@ var section_label: Label
 var confirm_btn: Button
 var preview_label: Label
 var loc_label: Label
+var _nav_buttons: Dictionary = {}   # id -> Button
+var _pages: Dictionary = {}         # id -> Control
+var pages_container: Control
 static var _bold_font_cache: FontVariation
 # ── Colors ──────────────────────────────────────────────────────
 const C_BG_DARK    := Color(0.13, 0.13, 0.13)
@@ -83,6 +86,7 @@ func _build_ui() -> void:
 	modal_overlay = _build_modal()
 	add_child(modal_overlay)
 	modal_overlay.hide()
+	_on_nav_selected("projects")
 
 # ── Sidebar ─────────────────────────────────────────────────────
 func _build_sidebar() -> Control:
@@ -110,11 +114,11 @@ func _build_sidebar() -> Control:
 
 	# Nav
 	var nav_items := [
-		["Projects",  true,  "res://Assets/folders.svg"],
-		["Installs",  false, "res://Assets/server.svg"],
-		["Learn",      false, "res://Assets/graduation-cap.svg"],
-		["Community", false, "res://Assets/building-2.svg"],
-	]
+	{"label": "Projects",  "id": "projects",  "icon": "res://Assets/folders.svg"},
+	{"label": "Installs",  "id": "installs",  "icon": "res://Assets/server.svg"},
+	{"label": "Learn",     "id": "learn",     "icon": "res://Assets/graduation-cap.svg"},
+	{"label": "Community", "id": "community", "icon": "res://Assets/building-2.svg"},
+]
 	var nav_pad := MarginContainer.new()
 	for m in ["left","right","top","bottom"]:
 		nav_pad.add_theme_constant_override("margin_" + m, 8)
@@ -124,6 +128,38 @@ func _build_sidebar() -> Control:
 	vbox.add_child(nav_pad)
 
 
+	#for item in nav_items:
+		#var btn := Button.new()
+		#btn.flat = false
+		#btn.focus_mode = Control.FOCUS_NONE
+		#btn.custom_minimum_size = Vector2(0, 44)
+		#btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		#btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+#
+		#if item[1]:
+			#btn.add_theme_stylebox_override("normal",  _pad(_flat(C_BG_ACTIVE, 6), 10, 12))
+		#else:
+			#btn.add_theme_stylebox_override("normal",  _pad(_flat(Color.TRANSPARENT, 6), 10, 12))
+			#btn.add_theme_stylebox_override("hover",   _pad(_flat(C_BG_HOVER, 6), 10, 12))
+		#btn.add_theme_stylebox_override("pressed", _pad(_flat(C_BG_ACTIVE, 6), 10, 12))
+		#btn.add_theme_stylebox_override("focus",   _pad(_flat(Color.TRANSPARENT), 10, 12))
+	## Dùng HBoxContainer trực tiếp, KHÔNG dùng MarginContainer + PRESET_FULL_RECT
+		#var content := HBoxContainer.new()
+		#content.add_theme_constant_override("separation", 10)
+		#content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		#content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		#btn.add_child(content)
+		#var text_color := C_TEXT if item[1] else C_TEXT_MUTED
+		#content.add_child(_make_nav_icon(item[2], text_color))
+		#var lbl := Label.new()
+		#lbl.text = item[0]
+		#lbl.add_theme_font_size_override("font_size", 14)
+		#lbl.add_theme_color_override("font_color", text_color)
+		#lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		#lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		#content.add_child(lbl)
+#
+		#nav_vbox.add_child(btn)
 	for item in nav_items:
 		var btn := Button.new()
 		btn.flat = false
@@ -131,31 +167,31 @@ func _build_sidebar() -> Control:
 		btn.custom_minimum_size = Vector2(0, 44)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.add_theme_stylebox_override("hover", _pad(_flat(C_BG_HOVER, 6), 10, 12))
+		btn.add_theme_stylebox_override("focus", _pad(_flat(Color.TRANSPARENT), 10, 12))
 
-		if item[1]:
-			btn.add_theme_stylebox_override("normal",  _pad(_flat(C_BG_ACTIVE, 6), 10, 12))
-		else:
-			btn.add_theme_stylebox_override("normal",  _pad(_flat(Color.TRANSPARENT, 6), 10, 12))
-			btn.add_theme_stylebox_override("hover",   _pad(_flat(C_BG_HOVER, 6), 10, 12))
-		btn.add_theme_stylebox_override("pressed", _pad(_flat(C_BG_ACTIVE, 6), 10, 12))
-		btn.add_theme_stylebox_override("focus",   _pad(_flat(Color.TRANSPARENT), 10, 12))
-	# Dùng HBoxContainer trực tiếp, KHÔNG dùng MarginContainer + PRESET_FULL_RECT
 		var content := HBoxContainer.new()
 		content.add_theme_constant_override("separation", 10)
 		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		btn.add_child(content)
-		var text_color := C_TEXT if item[1] else C_TEXT_MUTED
-		content.add_child(_make_nav_icon(item[2], text_color))
+
+		var icon := _make_nav_icon(item.icon, C_TEXT_MUTED)
+		content.add_child(icon)
 		var lbl := Label.new()
-		lbl.text = item[0]
+		lbl.text = item.label
 		lbl.add_theme_font_size_override("font_size", 14)
-		lbl.add_theme_color_override("font_color", text_color)
+		lbl.add_theme_color_override("font_color", C_TEXT_MUTED)
 		lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		content.add_child(lbl)
 
+		_nav_buttons[item.id] = btn
+		btn.pressed.connect(_on_nav_selected.bind(item.id))
 		nav_vbox.add_child(btn)
+
+# set active ban đầu
+	_on_nav_selected("projects")
 	# Spacer
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -181,108 +217,135 @@ func _build_sidebar() -> Control:
 	tier_lbl.add_theme_font_size_override("font_size", 11)
 	tier_lbl.add_theme_color_override("font_color", C_TEXT_MUTED)
 	fvbox.add_child(tier_lbl)
-
+	ProjectState.tier_updated.connect(
+		_on_tier_updated.bind(tier_lbl)
+	)
 	vbox.add_child(footer)
 	return bg
 
+func _on_tier_updated(tier: String, tier_name: String, lbl: Label) -> void:
+	if not is_instance_valid(lbl):
+		return
+	lbl.text = tier_name if tier_name != "" else "Trial"
+#func _build_main_area() -> Control:
+	#var bg := PanelContainer.new()
+	#bg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	#bg.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+	#bg.add_theme_stylebox_override("panel", _flat(C_BG_MAIN))
+#
+	#var vbox := VBoxContainer.new()
+	#vbox.add_theme_constant_override("separation", 0)
+	#bg.add_child(vbox)
+#
+	## Topbar (chứa luôn tiêu đề Projects)
+	#var topbar := PanelContainer.new()
+#
+	#topbar.add_theme_stylebox_override("panel", _pad(_flat(C_BG_SIDEBAR), 12, 10))
+	#var topbar_vbox := VBoxContainer.new()
+	#topbar_vbox.add_theme_constant_override("separation", 0)
+	#topbar.add_child(topbar_vbox)
+	#var tbar_hbox := HBoxContainer.new()
+	#tbar_hbox.add_theme_constant_override("separation", 8)
+	#tbar_hbox.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	#topbar.add_child(tbar_hbox)
+	## Khoảng đệm thêm bên dưới, cùng màu với topbar
+	#var topbar_extra := Control.new()
+	#topbar_extra.custom_minimum_size = Vector2(0, 80)
+	#topbar_vbox.add_child(topbar_extra)
+#
+	## Page title — bên trái
+	#var page_title := Label.new()
+	#page_title.text = "Projects"
+	#page_title.add_theme_font_size_override("font_size", 28)
+	#page_title.add_theme_color_override("font_color", C_TEXT)
+	#page_title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	#tbar_hbox.add_child(page_title)
+#
+	## Spacer đẩy Search + Open + New project sang phải
+	#var spacer := Control.new()
+	#spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	#tbar_hbox.add_child(spacer)
+#
+	## Search
+	#search_input = LineEdit.new()
+	#search_input.placeholder_text = "Search..."
+	#search_input.custom_minimum_size = Vector2(220, 32)
+	#search_input.size_flags_horizontal = Control.SIZE_SHRINK_END
+	#search_input.size_flags_vertical   = Control.SIZE_SHRINK_CENTER
+	#search_input.add_theme_stylebox_override("normal", _pad(_flat_border(C_BG_DARK, C_BORDER, 6), 10, 6))
+	#search_input.add_theme_stylebox_override("focus",  _pad(_flat_border(C_BG_DARK, C_ACCENT, 6), 10, 6))
+	#search_input.add_theme_color_override("font_color", C_TEXT)
+	#search_input.add_theme_color_override("font_placeholder_color", C_TEXT_MUTED)
+	#search_input.caret_blink = true
+	#search_input.caret_blink_interval = 0.5
+	#search_input.add_theme_color_override("caret_color", C_TEXT)
+	#search_input.text_changed.connect(_on_search_changed)
+	#tbar_hbox.add_child(search_input)
+#
+	## Open
+	#var open_btn := _make_btn("Open", false)
+	#open_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	#open_btn.add_theme_font_override("font", _get_bold_font())
+	#open_btn.pressed.connect(_on_open_btn)
+	#tbar_hbox.add_child(open_btn)
+#
+	## + New project
+	#var new_btn := _make_btn("+ New project", true)
+	#new_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	#new_btn.add_theme_font_override("font", _get_bold_font())
+	#new_btn.pressed.connect(_on_new_project_btn)
+	#tbar_hbox.add_child(new_btn)
+#
+	#vbox.add_child(topbar)
+	#vbox.add_child(_hsep())
+#
+#
+	## Table header
+	#vbox.add_child(_build_table_header())
+	#vbox.add_child(_hsep())
+#
+	## Scroll + list
+	#var scroll := ScrollContainer.new()
+	#scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	#scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	#vbox.add_child(scroll)
+#
+	#projects_container = VBoxContainer.new()
+	#projects_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	#projects_container.add_theme_constant_override("separation", 0)
+	#scroll.add_child(projects_container)
+#
+	## Empty state label
+	#empty_label = Label.new()
+	#empty_label.text = "No projects yet"
+	#empty_label.add_theme_font_size_override("font_size", 13)
+	#empty_label.add_theme_color_override("font_color", C_TEXT_MUTED)
+	#empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	#empty_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+#
+	#return bg
 func _build_main_area() -> Control:
 	var bg := PanelContainer.new()
 	bg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bg.size_flags_vertical   = Control.SIZE_EXPAND_FILL
 	bg.add_theme_stylebox_override("panel", _flat(C_BG_MAIN))
 
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 0)
-	bg.add_child(vbox)
+	pages_container = Control.new()
+	pages_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.add_child(pages_container)
 
-	# Topbar (chứa luôn tiêu đề Projects)
-	var topbar := PanelContainer.new()
+	_pages["projects"]  = _build_projects_page()
+	_pages["installs"]  = preload("res://Scripts/Pages/InstallsPage.gd").new()
+	_pages["learn"]     = preload("res://Scripts/Pages/LearnPage.gd").new()
+	_pages["community"] = preload("res://Scripts/Pages/CommunityPage.gd").new()
 
-	topbar.add_theme_stylebox_override("panel", _pad(_flat(C_BG_SIDEBAR), 12, 10))
-	var topbar_vbox := VBoxContainer.new()
-	topbar_vbox.add_theme_constant_override("separation", 0)
-	topbar.add_child(topbar_vbox)
-	var tbar_hbox := HBoxContainer.new()
-	tbar_hbox.add_theme_constant_override("separation", 8)
-	tbar_hbox.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	topbar.add_child(tbar_hbox)
-	# Khoảng đệm thêm bên dưới, cùng màu với topbar
-	var topbar_extra := Control.new()
-	topbar_extra.custom_minimum_size = Vector2(0, 80)
-	topbar_vbox.add_child(topbar_extra)
-
-	# Page title — bên trái
-	var page_title := Label.new()
-	page_title.text = "Projects"
-	page_title.add_theme_font_size_override("font_size", 28)
-	page_title.add_theme_color_override("font_color", C_TEXT)
-	page_title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	tbar_hbox.add_child(page_title)
-
-	# Spacer đẩy Search + Open + New project sang phải
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tbar_hbox.add_child(spacer)
-
-	# Search
-	search_input = LineEdit.new()
-	search_input.placeholder_text = "Search..."
-	search_input.custom_minimum_size = Vector2(220, 32)
-	search_input.size_flags_horizontal = Control.SIZE_SHRINK_END
-	search_input.size_flags_vertical   = Control.SIZE_SHRINK_CENTER
-	search_input.add_theme_stylebox_override("normal", _pad(_flat_border(C_BG_DARK, C_BORDER, 6), 10, 6))
-	search_input.add_theme_stylebox_override("focus",  _pad(_flat_border(C_BG_DARK, C_ACCENT, 6), 10, 6))
-	search_input.add_theme_color_override("font_color", C_TEXT)
-	search_input.add_theme_color_override("font_placeholder_color", C_TEXT_MUTED)
-	search_input.caret_blink = true
-	search_input.caret_blink_interval = 0.5
-	search_input.add_theme_color_override("caret_color", C_TEXT)
-	search_input.text_changed.connect(_on_search_changed)
-	tbar_hbox.add_child(search_input)
-
-	# Open
-	var open_btn := _make_btn("Open", false)
-	open_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	open_btn.add_theme_font_override("font", _get_bold_font())
-	open_btn.pressed.connect(_on_open_btn)
-	tbar_hbox.add_child(open_btn)
-
-	# + New project
-	var new_btn := _make_btn("+ New project", true)
-	new_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	new_btn.add_theme_font_override("font", _get_bold_font())
-	new_btn.pressed.connect(_on_new_project_btn)
-	tbar_hbox.add_child(new_btn)
-
-	vbox.add_child(topbar)
-	vbox.add_child(_hsep())
-
-
-	# Table header
-	vbox.add_child(_build_table_header())
-	vbox.add_child(_hsep())
-
-	# Scroll + list
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	vbox.add_child(scroll)
-
-	projects_container = VBoxContainer.new()
-	projects_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	projects_container.add_theme_constant_override("separation", 0)
-	scroll.add_child(projects_container)
-
-	# Empty state label
-	empty_label = Label.new()
-	empty_label.text = "No projects yet"
-	empty_label.add_theme_font_size_override("font_size", 13)
-	empty_label.add_theme_color_override("font_color", C_TEXT_MUTED)
-	empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	empty_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for id in _pages:
+		var page: Control = _pages[id]
+		page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		page.visible = false
+		pages_container.add_child(page)
 
 	return bg
-
 func _build_table_header() -> Control:
 	const ROW_PAD_H := 28
 
@@ -898,3 +961,112 @@ func _on_modal_confirm() -> void:
 	#var fw := FileAccess.open(index_path, FileAccess.WRITE)
 	#fw.store_string(JSON.stringify(list))
 	#fw.close()
+func _on_nav_selected(id: String) -> void:
+	for pid in _pages:
+		_pages[pid].visible = (pid == id)
+
+	for bid in _nav_buttons:
+		var btn: Button = _nav_buttons[bid]
+		var active: bool = bid == id
+		var color := C_TEXT if active else C_TEXT_MUTED
+		btn.add_theme_stylebox_override(
+			"normal",
+			_pad(_flat(C_BG_ACTIVE if active else Color.TRANSPARENT, 6), 10, 12)
+		)
+		for content in btn.get_children():
+			for sub in content.get_children():
+				if sub is TextureRect:
+					sub.modulate = color
+				elif sub is Label:
+					sub.add_theme_color_override("font_color", color)
+
+func _build_projects_page() -> Control:
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 0)
+
+	# Topbar (chứa luôn tiêu đề Projects)
+	var topbar := PanelContainer.new()
+
+	topbar.add_theme_stylebox_override("panel", _pad(_flat(C_BG_SIDEBAR), 12, 10))
+	var topbar_vbox := VBoxContainer.new()
+	topbar_vbox.add_theme_constant_override("separation", 0)
+	topbar.add_child(topbar_vbox)
+	var tbar_hbox := HBoxContainer.new()
+	tbar_hbox.add_theme_constant_override("separation", 8)
+	tbar_hbox.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	topbar.add_child(tbar_hbox)
+	# Khoảng đệm thêm bên dưới, cùng màu với topbar
+	var topbar_extra := Control.new()
+	topbar_extra.custom_minimum_size = Vector2(0, 80)
+	topbar_vbox.add_child(topbar_extra)
+
+	# Page title — bên trái
+	var page_title := Label.new()
+	page_title.text = "Projects"
+	page_title.add_theme_font_size_override("font_size", 28)
+	page_title.add_theme_color_override("font_color", C_TEXT)
+	page_title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tbar_hbox.add_child(page_title)
+
+	# Spacer đẩy Search + Open + New project sang phải
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tbar_hbox.add_child(spacer)
+
+	# Search
+	search_input = LineEdit.new()
+	search_input.placeholder_text = "Search..."
+	search_input.custom_minimum_size = Vector2(220, 32)
+	search_input.size_flags_horizontal = Control.SIZE_SHRINK_END
+	search_input.size_flags_vertical   = Control.SIZE_SHRINK_CENTER
+	search_input.add_theme_stylebox_override("normal", _pad(_flat_border(C_BG_DARK, C_BORDER, 6), 10, 6))
+	search_input.add_theme_stylebox_override("focus",  _pad(_flat_border(C_BG_DARK, C_ACCENT, 6), 10, 6))
+	search_input.add_theme_color_override("font_color", C_TEXT)
+	search_input.add_theme_color_override("font_placeholder_color", C_TEXT_MUTED)
+	search_input.caret_blink = true
+	search_input.caret_blink_interval = 0.5
+	search_input.add_theme_color_override("caret_color", C_TEXT)
+	search_input.text_changed.connect(_on_search_changed)
+	tbar_hbox.add_child(search_input)
+
+	# Open
+	var open_btn := _make_btn("Open", false)
+	open_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	open_btn.add_theme_font_override("font", _get_bold_font())
+	open_btn.pressed.connect(_on_open_btn)
+	tbar_hbox.add_child(open_btn)
+
+	# + New project
+	var new_btn := _make_btn("+ New project", true)
+	new_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	new_btn.add_theme_font_override("font", _get_bold_font())
+	new_btn.pressed.connect(_on_new_project_btn)
+	tbar_hbox.add_child(new_btn)
+
+	vbox.add_child(topbar)
+	vbox.add_child(_hsep())
+
+	# Table header
+	vbox.add_child(_build_table_header())
+	vbox.add_child(_hsep())
+
+	# Scroll + list
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+
+	projects_container = VBoxContainer.new()
+	projects_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	projects_container.add_theme_constant_override("separation", 0)
+	scroll.add_child(projects_container)
+
+	# Empty state label
+	empty_label = Label.new()
+	empty_label.text = "No projects yet"
+	empty_label.add_theme_font_size_override("font_size", 13)
+	empty_label.add_theme_color_override("font_color", C_TEXT_MUTED)
+	empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	empty_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	return vbox
