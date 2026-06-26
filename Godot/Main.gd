@@ -193,6 +193,11 @@ var trash_panel: Panel = null
 
 # ──────────────────────────── INIT ────────────────────────────────
 func _ready():
+	get_window().size = Vector2i(1600, 900)
+	get_window().move_to_center()
+	
+	await get_tree().process_frame
+
 	$Root.rotation = 0.0
 	$Root/TopBar.size_flags_horizontal = Control.SIZE_FILL
 	$Root/StatusBar.size_flags_horizontal = Control.SIZE_FILL
