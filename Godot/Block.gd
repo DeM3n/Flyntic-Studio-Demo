@@ -96,7 +96,7 @@ func _collect_stack_below():
 			"block": b,
 			"offset": b.position - self.position  # relative offset
 		})
-		b.z_index = 99  # Nổi lên nhưng dưới block đang drag
+		b.z_index = 3  # Nổi lên nhưng dưới block đang drag
 
 func _find_direct_below(ref_block, all_blocks: Array, visited: Dictionary):
 	var expected_y = ref_block.position.y + ref_block.custom_minimum_size.y

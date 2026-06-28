@@ -193,6 +193,7 @@ var trash_panel: Panel = null
 
 # ──────────────────────────── INIT ────────────────────────────────
 func _ready():
+
 	get_window().size = Vector2i(1600, 900)
 	get_window().move_to_center()
 	
@@ -253,12 +254,16 @@ func _ready():
 		leaf.add_panel(blocks_panel, "Blocks", "blocks")
 		leaf.add_panel(wiring_panel, "Wiring", "wiring")
 		dock_manager.root_container.add_child(leaf) 
-		
+		leaf.tab_bar.current_tab = 0
+		canvas_panel.visible = true
+		blocks_panel.visible = false
+		wiring_panel.visible = false
 	tabs.tabs_visible = false
 	_create_hier_toggle()
 	_setup_file_buttons()
 	_setup_comp_search()
 
+	tabs.clip_contents = true
 	#=====================
 	if ProjectState.pending_path != "":
 		_read_project(ProjectState.pending_path)
@@ -339,7 +344,7 @@ func _on_bridge_disconnected():
 	bridge_connected = false
 	_log("Bridge: Disconnected — using kinematic fallback", "warning")
 
-
+#======Block
 func _setup_blocks():
 	_active_block_cat = "BtnE"
 	
@@ -858,7 +863,7 @@ func _input(event):
 	if $Root/TutorialOverlay.visible:
 		return
 	# CRITICAL: Ignore 3D interactions if we are not ở Canvas tab hoặc đang simulation
-	if tabs.current_tab != 0:
+	if not vpc.is_visible_in_tree():
 		orbiting = false
 		panning = false
 		return

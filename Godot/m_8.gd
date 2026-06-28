@@ -29,7 +29,10 @@ func _on_button_pressed():
 		print("→ Bỏ qua vì vừa tự đóng")
 		return
 	
-	popup.position = global_position + Vector2(0, size.y + 4)
+		# Quy đổi từ tọa độ viewport sang tọa độ màn hình thật
+	var screen_transform := get_viewport().get_screen_transform()
+	var local_pos := global_position + Vector2(0, size.y + 4)
+	popup.position = Vector2i(screen_transform * local_pos)
 	popup.popup()
 	_popup_open = true
 

@@ -801,7 +801,10 @@ func _draw_wire(from: Vector2, to: Vector2, col: Color, bend_pts: Array = [], co
 					cv.draw_arc(hint, 4.0, 0, TAU, 12, Color(col.r, col.g, col.b, 0.45), 1.5, true)
 
 # ─────────────────────────────── INPUT ────────────────────────────
+
 func _canvas_input(event: InputEvent):
+	if not canvas.is_visible_in_tree():
+		return
 	if event is InputEventMouseButton:
 		var mp = event.position
 
