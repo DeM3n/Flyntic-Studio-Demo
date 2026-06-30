@@ -17,13 +17,13 @@ func _ready():
 
 
 	menu_btn.flat = false
-	var font = load("res://Assets/Fonts/OpenSans-SemiBold.ttf")  # đổi path cho đúng
-	menu_btn.add_theme_font_override("font", font)
+	#var font = load("res://Assets/Fonts/OpenSans-SemiBold.ttf")  # đổi path cho đúng
+	#menu_btn.add_theme_font_override("font", font)
 	menu_btn.add_theme_font_size_override("font_size", 12)
 	print(menu_btn.get_theme_font("font"))
 	print(menu_btn.get_theme_font_size("font_size"))
 	var popup = menu_btn.get_popup()
-	popup.add_theme_font_override("font", font)
+	#popup.add_theme_font_override("font", font)
 	popup.add_theme_font_size_override("font_size", 12)
 	popup.add_item("Logout", 0)
 	popup.id_pressed.connect(_on_user_menu_pressed)

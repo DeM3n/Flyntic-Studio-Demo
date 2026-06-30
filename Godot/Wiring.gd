@@ -170,12 +170,20 @@ func _build_ui():
 	sidebar.add_theme_stylebox_override("panel", sb_style)
 	hbox.add_child(sidebar)
 
+	var scroll = ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sidebar.add_child(scroll)
 
 	var sv = VBoxContainer.new()
-	sv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sv.add_theme_constant_override("separation", 0)
-	sidebar.add_child(sv)
-	sidebar.custom_minimum_size = Vector2(178, 0)
+	scroll.add_child(sv)
+	#var sv = VBoxContainer.new()
+	#sv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	#sv.add_theme_constant_override("separation", 0)
+	#sidebar.add_child(sv)
+	#sidebar.custom_minimum_size = Vector2(178, 0)
 
 
 

@@ -968,11 +968,13 @@ func _process(_delta):
 
 	if is_instance_valid(ghost):
 		_move_ghost()
-	if sim_state == "playing":
-		_simulate(_delta)
+	#if sim_state == "playing":
+		#_simulate(_delta)
 	_update_block_snap_preview()
 
-
+func _physics_process(delta: float) -> void:
+	if sim_state == "playing":
+		_simulate(delta)
 func _update_block_snap_preview():
 # Tìm block đang drag bằng cách scan tất cả blocks
 	var dragging_block = null
@@ -1629,6 +1631,7 @@ func _on_stop():
 	if drone_root:
 		drone_root.rotation = Vector3.ZERO
 		drone_root.position = Vector3.ZERO
+
 	sim_step_idx = 0
 	# CRITICAL: Rebuild wires at home position to prevent "bulging"
 	_rebuild_wires()
@@ -1650,8 +1653,9 @@ func _on_stop():
 func _simulate(delta: float):
 	sim_time += delta
 	var check = _preflight_check()
-
 	# 1. Propeller Spin — use bridge RPMs if available
+	#print("capability: ", check.capability, " | use_native_physics: ", use_native_physics, " | bridge_active: ", _bridge_active())
+	
 	if sim_state == "playing":
 		var bridge_rpms = []
 		if _bridge_active():
@@ -1670,7 +1674,7 @@ func _simulate(delta: float):
 	if check.capability == "Cannot fly" and not _bridge_active():
 		components_group.position.y = lerp(components_group.position.y, 0.0, 0.08)
 		return
-
+	
 	# ── BRIDGE PHYSICS MODE ──
 	if _bridge_active() and use_bridge_physics:
 		_simulate_bridge(delta)
@@ -1797,8 +1801,9 @@ func _simulate_kinematic(delta: float, check: Dictionary):
 	
 	drone_root.rotation.x = lerp(drone_root.rotation.x, tilt_x, 0.1)  # ← ĐỔI
 	drone_root.rotation.z = lerp(drone_root.rotation.z, tilt_z, 0.1)
+#-===============moi add vao
 
-
+#=========================================
 func _preflight_check() -> Dictionary:
 	var motors_with_props = []
 	var motors_total = 0
@@ -2422,55 +2427,6 @@ func _remove_component(uid: int):
 	_rebuild_wires()
 	_update_all()
 
-
-#func _re_place_ghost_children(parent_uid_hint: int):
-	#if _ghost_children.is_empty():
-		#
-		#return
-	## Tìm motor vừa place
-	#var parent_entry = null
-	#var latest_uid = -1
-	#for entry in placed:
-		#if entry.id == cur_id and entry.uid > latest_uid:
-			#latest_uid = entry.uid
-			#parent_entry = entry
-	#
-	#if parent_entry == null:
-		#_log("FAILED: parent_entry is null, cur_id=" + cur_id, "error")
-		#_ghost_children.clear()
-		#return
-	#
-	#if not is_instance_valid(parent_entry.get("node")):
-		#_log("FAILED: parent node invalid", "error")
-		#_ghost_children.clear()
-		#return
-		#
-	#
-	#for child_info in _ghost_children:
-		#
-		#var child_type = COMPONENTS[child_info.id].type
-		#var ports = COMPONENTS[parent_entry.id].get("ports", [])
-		#
-		#var target_port = ""
-		#var target_pos = parent_entry.node.global_position
-		#
-		#for port in ports:
-			#if not port.get("allowed", []).has(child_type):
-				#continue
-			#var occupied = false
-			#for other in placed:
-				#if other.get("port_name", "") == port.name and other.get("parent_id", -1) == parent_entry.uid:
-					#occupied = true
-					#break
-			#if not occupied:
-				#target_port = port.name
-				#target_pos = parent_entry.node.global_transform * port.pos
-				#break
-		#
-		#_place(child_info.id, target_pos, target_port, parent_entry.uid)
-#
-	#
-	#_ghost_children.clear()
 func _re_place_ghost_children(parent_uid_hint: int):
 	if _ghost_children.is_empty():
 		return
