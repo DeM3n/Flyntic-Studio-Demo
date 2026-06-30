@@ -129,6 +129,7 @@ var COMPONENTS := {
 	},
 	"Motor 2205 2300KV": {
 		"type": "Motor", "weight": 35, "thrust": 850, "capacity": 0,
+		
 		"color": Color(0.6, 0.25, 0.25),
 		"ground_offset": 0.3,
 		"ports": [{"name": "prop", "pos": Vector3(0, 0.5, 0), "slot": true, "allowed": ["Propeller"]}]
@@ -147,11 +148,13 @@ var COMPONENTS := {
 	},
 	"Propeller 5045": {
 		"type": "Propeller", "weight": 8, "thrust": 0, "capacity": 0,
+		"thrust_mult": 1.0,
 		"ground_offset": 0.07,
 		"color": Color(0.8, 0.1, 0.1), "ports": []
 	},
 	"Propeller 6045": {
 		"type": "Propeller", "weight": 12, "thrust": 0, "capacity": 0,
+		"thrust_mult": 1.18,
 		"ground_offset": 0.07,
 		"color": Color(0.1, 0.1, 0.8), "ports": []
 	},
@@ -1212,7 +1215,15 @@ func _place(id: String, pos: Vector3, port_name: String = "", parent_uid: int = 
 	_update_all()
 	_log("Assembled: " + id, "success")
 
-
+func _is_in_drone(node: Node) -> bool:
+	if drone_root == null:
+		return false
+	var n = node
+	while n != null:
+		if n == drone_root:
+			return true
+		n = n.get_parent()
+	return false
 var _ghost_children: Array[Dictionary] = [] 
 
 
@@ -1860,20 +1871,82 @@ func _preflight_check() -> Dictionary:
 	return {"capability": cap, "reason": "", "tilt_x": tilt_x, "tilt_z": tilt_z}
 
 # ──────────────────────────── UPDATE UI ───────────────────────────
-func _update_all():
+#func _update_all():
+	#var tw := 0.0
+	#var tt := 0.0
+	#var bat_cap := 0
+	#for c in placed:
+		#if not _is_in_drone(c.node):
+			#continue
+		#var d = COMPONENTS[c.id]
+		#tw += d.weight
+		#tt += d.thrust
+		#bat_cap += d.get("capacity", 0)
+#
+	#weight_val.text = "%.1f g" % tw
+	#thrust_val.text = "%.2f kg" % (tt / 1000.0)
+	#var ratio = (tt / tw) if tw > 0 else 0.0
+	#twr_val.text = "%.2f:1" % ratio
+	## Capability badge
+	#if ratio >= 2.0:
+		#cap_val.text = "Good"
+		#cap_val.add_theme_color_override("font_color", Color(0.3, 0.9, 0.4))
+	#elif ratio >= 1.5:
+		#cap_val.text = "Marginal"
+		#cap_val.add_theme_color_override("font_color", Color(0.9, 0.8, 0.2))
+	#else:
+		#cap_val.text = "N/A"
+		#cap_val.remove_theme_color_override("font_color")
+#
+	#bat_val.text = str(bat_cap) + " mAh"
+	#var draw_a = tt * 0.001 * 30 # rough amps estimate
+	#var ft_min = (bat_cap / 1000.0 * 60.0 / max(draw_a, 1)) if bat_cap > 0 else 0
+	#ft_val.text = "%.1f min" % ft_min
+	#comp_count.text = "  Components: " + str(placed.size())
+	## Diagnostics
+	#_update_diagnostics()
+	## Hierarchy
+	#_build_hierarchy_tree()
+	
+func _calculate_stats() -> Dictionary:
 	var tw := 0.0
 	var tt := 0.0
 	var bat_cap := 0
+
 	for c in placed:
+		if not _is_in_drone(c.node):
+			continue
 		var d = COMPONENTS[c.id]
 		tw += d.weight
-		tt += d.thrust
 		bat_cap += d.get("capacity", 0)
+
+		if d.type == "Motor":
+			var mult = 1.0
+			for child in placed:
+				if child.parent_id == c.uid and COMPONENTS[child.id].type == "Propeller":
+					mult = COMPONENTS[child.id].get("thrust_mult", 1.0)
+					break
+			tt += d.thrust * mult
+
+	return {
+		"weight": tw,
+		"thrust": tt,
+		"battery": bat_cap,
+	}
+
+
+func _update_all():
+	var stats = _calculate_stats()
+	var tw = stats.weight
+	var tt = stats.thrust
+	var bat_cap = stats.battery
 
 	weight_val.text = "%.1f g" % tw
 	thrust_val.text = "%.2f kg" % (tt / 1000.0)
+
 	var ratio = (tt / tw) if tw > 0 else 0.0
 	twr_val.text = "%.2f:1" % ratio
+
 	# Capability badge
 	if ratio >= 2.0:
 		cap_val.text = "Good"
@@ -1886,16 +1959,17 @@ func _update_all():
 		cap_val.remove_theme_color_override("font_color")
 
 	bat_val.text = str(bat_cap) + " mAh"
+
 	var draw_a = tt * 0.001 * 30 # rough amps estimate
 	var ft_min = (bat_cap / 1000.0 * 60.0 / max(draw_a, 1)) if bat_cap > 0 else 0
 	ft_val.text = "%.1f min" % ft_min
+
 	comp_count.text = "  Components: " + str(placed.size())
+
 	# Diagnostics
 	_update_diagnostics()
 	# Hierarchy
 	_build_hierarchy_tree()
-	
-
 
 func _on_hier_item_selected():
 	#var item = hier_tree.get_selected()
