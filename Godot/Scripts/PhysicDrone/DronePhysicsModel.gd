@@ -111,3 +111,52 @@ static func _local_pos_of(comp: Dictionary, root_inverse: Transform3D) -> Vector
 		var local_pos: Vector3 = root_inverse * node.global_transform.origin
 		return local_pos * UNIT_TO_METER
 	return Vector3.ZERO
+
+## Lấy điện áp pin danh nghĩa (3.7V/cell theo chuẩn LiPo)
+static func get_battery_voltage(placed: Array, components: Dictionary) -> float:
+	for comp in placed:
+		var def: Dictionary = components.get(comp.get("id", ""), {})
+		if def.get("type", "") == "Battery":
+			var cells: int = def.get("cells", 4)
+			return cells * 3.7
+	return 14.8  # fallback: 4S
+
+## Hệ số khớp KV-cánh quạt: 1.0 = khớp lý tưởng, giảm dần khi lệch dải kv_range
+static func _kv_prop_match_factor(motor_kv: float, prop_range: Vector2) -> float:
+	if motor_kv >= prop_range.x and motor_kv <= prop_range.y:
+		return 1.0
+	var dist: float = prop_range.x - motor_kv if motor_kv < prop_range.x else motor_kv - prop_range.y
+	var span: float = max(prop_range.y - prop_range.x, 1.0)
+	var penalty: float = clamp(dist / span, 0.0, 1.0)
+	return clamp(1.0 - penalty * 0.5, 0.5, 1.0)  # tệ nhất giảm còn 50%, không triệt tiêu hoàn toàn
+
+## Trung bình hệ số khớp trên toàn bộ cánh quạt đang gắn
+static func get_kv_mismatch_factor(placed: Array, components: Dictionary, avg_kv: float) -> float:
+	var factors: Array = []
+	for comp in placed:
+		var def: Dictionary = components.get(comp.get("id", ""), {})
+		if def.get("type", "") == "Propeller" and def.has("kv_range"):
+			factors.append(_kv_prop_match_factor(avg_kv, def["kv_range"]))
+	if factors.is_empty():
+		return 1.0
+	var total: float = 0.0
+	for f in factors:
+		total += f
+	return total / factors.size()
+## Trả về hệ số quá tải ESC: 1.0 = an toàn, < 1.0 = quá tải (phạt hiệu suất/nhiệt)
+static func get_esc_overload_factor(placed: Array, components: Dictionary) -> float:
+	var esc_rating := 0.0
+	var max_motor_current := 0.0
+	for comp in placed:
+		var def: Dictionary = components.get(comp.get("id", ""), {})
+		if def.get("type", "") == "ESC":
+			esc_rating = def.get("current_rating", 30.0)
+		elif def.get("type", "") == "Motor":
+			max_motor_current = max(max_motor_current, def.get("max_current", 20.0))
+	if esc_rating <= 0.0:
+		return 1.0
+	if max_motor_current <= esc_rating:
+		return 1.0
+	# Vượt dòng → phạt tuyến tính, tệ nhất còn 40%
+	var overshoot: float = (max_motor_current - esc_rating) / esc_rating
+	return clamp(1.0 - overshoot * 0.6, 0.4, 1.0)

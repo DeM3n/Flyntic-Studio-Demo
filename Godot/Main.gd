@@ -55,7 +55,7 @@ extends Control
 #Thanh tim kiem tren CompPanel
 var _search_text: String = ""
 var _active_filters: Array = []  # rỗng = hiện tất cả
-
+var sim_step_distance_traveled: float = 0.0
 @onready var search_box: LineEdit = $Root/Content/Left/CompPanel/V/SearchBox
 @onready var filter_btn: MenuButton = $Root/Content/Left/CompPanel/V/FilterButton
 # Scale factors for components
@@ -128,20 +128,22 @@ var COMPONENTS := {
 		"ground_offset": 0.0
 	},
 	"Motor 2205 2300KV": {
-		"type": "Motor", "weight": 35, "thrust": 850, "capacity": 0,
-		
+		"type": "Motor", "weight": 35, "thrust": 850, "capacity": 0,"kv": 2300,
+		"max_current": 28,
 		"color": Color(0.6, 0.25, 0.25),
 		"ground_offset": 0.3,
 		"ports": [{"name": "prop", "pos": Vector3(0, 0.5, 0), "slot": true, "allowed": ["Propeller"]}]
 	},
 	"Motor 2207 2400KV": {
-		"type": "Motor", "weight": 42, "thrust": 1100, "capacity": 0,
+		"type": "Motor", "weight": 42, "thrust": 1100, "capacity": 0,"kv": 2400,
+		"max_current": 33,
 		"color": Color(0.25, 0.45, 0.8),
 		"ground_offset": 0.3,
 		"ports": [{"name": "prop", "pos": Vector3(0, 0.5, 0), "slot": true, "allowed": ["Propeller"]}]
 	},
 	"Motor 2212 920KV": {
-		"type": "Motor", "weight": 56, "thrust": 980, "capacity": 0,
+		"type": "Motor", "weight": 56, "thrust": 980, "capacity": 0,"kv": 920,
+		"max_current": 18,
 		"color": Color(0.8, 0.55, 0.1),
 		"ground_offset": 0.3,
 		"ports": [{"name": "prop", "pos": Vector3(0, 0.5, 0), "slot": true, "allowed": ["Propeller"]}]
@@ -149,18 +151,22 @@ var COMPONENTS := {
 	"Propeller 5045": {
 		"type": "Propeller", "weight": 8, "thrust": 0, "capacity": 0,
 		"thrust_mult": 1.0,
+		"kv_range": Vector2(1900, 2600),
 		"ground_offset": 0.07,
 		"color": Color(0.8, 0.1, 0.1), "ports": []
 	},
 	"Propeller 6045": {
 		"type": "Propeller", "weight": 12, "thrust": 0, "capacity": 0,
 		"thrust_mult": 1.18,
+		"kv_range": Vector2(1400, 2100),
 		"ground_offset": 0.07,
 		"color": Color(0.1, 0.1, 0.8), "ports": []
 	},
 	"Lipo 4S 1500mAh": {
 		"type": "Battery", "weight": 185, "thrust": 0, "capacity": 1500,
-		 "ground_offset": 0.1,
+		"cells": 4,   
+		"current_rating": 45,
+		"ground_offset": 0.1,
 		"color": Color(0.85, 0.7, 0.15), "ports": []
 	},
 	"F4 Flight Controller": {
@@ -1758,60 +1764,158 @@ func _on_bridge_state(state: Dictionary):
 	if sim_state == "playing":
 		sim_label.text = status_text.capitalize()
 
+func _get_flight_params() -> Dictionary:
+	if drone_root == null or placed.is_empty():
+		return {"speed": 1.0, "climb": 0.05, "responsiveness": 0.1}
+	
+	var props = DronePhysicsModel.compute_mass_properties(placed, COMPONENTS, drone_root)
+	var twr = DronePhysicsModel.thrust_to_weight_ratio(props.motors, props.total_mass_kg)
+	
+	# TWR 2.0 = mức chuẩn (baseline), drone vừa đủ bay ổn
+	# TWR 4.0+ = motor rất khỏe, bay nhanh
+	# TWR < 2.0 = cận giới hạn bay, rất chậm
+	var speed_factor := clampf(twr / 2.0, 0.3, 3.0)
+	var total_kv := 0.0
+	var motor_count := 0
+	for comp in placed:
+		var def: Dictionary = COMPONENTS.get(comp.get("id", ""), {})
+		if def.get("type", "") == "Motor":
+			total_kv += def.get("kv", 1500.0)   # 1500 = fallback nếu chưa có field kv
+			motor_count += 1
+	var avg_kv: float = total_kv / max(motor_count, 1)   # <-- dòng bị thiếu, đã thêm lại
+
+	var voltage := DronePhysicsModel.get_battery_voltage(placed, COMPONENTS)
+	var mismatch_factor := DronePhysicsModel.get_kv_mismatch_factor(placed, COMPONENTS, avg_kv)
+	# kv_factor giờ tính theo RPM tham chiếu thật (KV × V), không chỉ KV thô
+	var rpm_ref := 1500.0 * 14.8  # baseline: 1500KV @ 4S
+	var kv_factor: float = clamp((avg_kv * voltage) / rpm_ref, 0.4, 2.0)
+	var esc_factor := DronePhysicsModel.get_esc_overload_factor(placed, COMPONENTS)
+	return {
+		"speed": speed_factor * mismatch_factor * esc_factor,
+		"climb": 0.03 * speed_factor * mismatch_factor * esc_factor,
+		"responsiveness": clamp(0.05 * kv_factor, 0.02, 0.15),
+	}
+	
+
+#func _simulate_kinematic(delta: float, check: Dictionary):
+	#if drone_root == null: return
+	#
+	#var fp = _get_flight_params()   # lấy tham số từ component thật
+	#
+	#if sim_state == "playing" and sim_step_idx < sim_sequence.size():
+		#var step = sim_sequence[sim_step_idx]
+		#sim_step_timer += delta
+		#
+		#match step.type:
+			#"take_off":
+				#sim_target_pos.y = 2.5
+			#"forward":
+				#if sim_step_timer <= delta:
+					#_log("▶ Forward bắt đầu | dist: %.0f cm | duration: %.1f s | speed_factor: %.2f" % [step.value, step.duration, fp.speed], "info")
+#
+				#var target_dist = step.value * 0.05
+				#var forward_dir = -drone_root.global_transform.basis.z
+				#forward_dir.y = 0
+				#forward_dir = forward_dir.normalized()
+				## fp.speed nhân vào đây → motor khỏe hơn đi xa hơn trong cùng thời gian
+				#sim_target_pos += forward_dir * target_dist * (delta / step.duration) * fp.speed
+				#if sim_target_pos.y < 2.0: sim_target_pos.y = 2.5
+			#"hover":
+				#pass
+			#"land":
+				#sim_target_pos.y = 0.0
+		#
+		#if sim_step_timer >= step.duration:
+			#sim_step_idx += 1
+			#sim_step_timer = 0.0
+			#if sim_step_idx < sim_sequence.size():
+				#_log("Step " + str(sim_step_idx + 1) + ": Executing " + sim_sequence[sim_step_idx].type, "info")
+			#else:
+				#_log("Program finished", "success")
+				#sim_label.text = "Finished"
+#
+	#var final_target = sim_target_pos
+	#if check.capability == "Cannot fly":
+		#final_target.y = 0.0
+#
+	## fp.climb thay cho 0.05 cứng → TWR cao = lerp nhanh hơn = leo nhanh hơn
+	#drone_root.position = drone_root.position.lerp(final_target, fp.climb)
+	#
+	#var displacement = (sim_target_pos - drone_root.position)
+	#var dynamic_pitch = clamp(displacement.z * 0.3, -0.3, 0.3)
+	#var dynamic_roll  = clamp(-displacement.x * 0.3, -0.3, 0.3)
+	#
+	#var tilt_x = check.tilt_x * 0.2 + dynamic_pitch + sin(sim_time * 1.5) * 0.01
+	#var tilt_z = check.tilt_z * 0.2 + dynamic_roll  + cos(sim_time * 1.5) * 0.01
+	#
+	#drone_root.rotation.x = lerp(drone_root.rotation.x, tilt_x, fp.responsiveness)
+	#drone_root.rotation.z = lerp(drone_root.rotation.z, tilt_z, fp.responsiveness)
 func _simulate_kinematic(delta: float, check: Dictionary):
 	if drone_root == null: return
-	"""Original kinematic simulation as fallback when bridge is not connected."""
-	# 2. Logic Step Processing
+	
+	var fp = _get_flight_params()
+	
 	if sim_state == "playing" and sim_step_idx < sim_sequence.size():
 		var step = sim_sequence[sim_step_idx]
 		sim_step_timer += delta
 		
+		var step_finished := false
+		
 		match step.type:
 			"take_off":
 				sim_target_pos.y = 2.5
+				step_finished = sim_step_timer >= step.duration
 			"forward":
-				# REAL MOVEMENT: Calculate target based on horizontal plane only
-				var target_dist = step.value * 0.05
+				var target_dist = step.value * 0.05  # cm -> Godot units, CỐ ĐỊNH
+				if sim_step_timer <= delta:
+					sim_step_distance_traveled = 0.0
+					_log("▶ Forward bắt đầu | dist: %.0f cm | speed_factor: %.2f" % [step.value, fp.speed], "info")
+				
+				var base_speed := 1.0  # units/s ở speed_factor = 1.0 — tune lại theo cảm giác bay
+				var move_step: float = base_speed * fp.speed * delta
+				move_step = min(move_step, target_dist - sim_step_distance_traveled)
+				
 				var forward_dir = -drone_root.global_transform.basis.z
-				forward_dir.y = 0 # FORCED HORIZONTAL
+				forward_dir.y = 0
 				forward_dir = forward_dir.normalized()
 				
-				# Incremental movement to target
-				sim_target_pos += forward_dir * target_dist * (delta / step.duration)
-				# Lock Y to prevent altitude bleed during tilt
+				sim_target_pos += forward_dir * move_step
+				sim_step_distance_traveled += move_step
 				if sim_target_pos.y < 2.0: sim_target_pos.y = 2.5
+				
+				step_finished = sim_step_distance_traveled >= target_dist - 0.001
+				if step_finished:
+					_log("✔ Forward xong | dist: %.0f cm | thời gian thực tế: %.2f s" % [step.value, sim_step_timer], "success")
 			"hover":
-				# Just bob in place (handled by physics below)
-				pass
+				step_finished = sim_step_timer >= step.duration
 			"land":
 				sim_target_pos.y = 0.0
+				step_finished = sim_step_timer >= step.duration
 		
-		if sim_step_timer >= step.duration:
+		if step_finished:
 			sim_step_idx += 1
 			sim_step_timer = 0.0
+			sim_step_distance_traveled = 0.0
 			if sim_step_idx < sim_sequence.size():
 				_log("Step " + str(sim_step_idx + 1) + ": Executing " + sim_sequence[sim_step_idx].type, "info")
 			else:
 				_log("Program finished", "success")
 				sim_label.text = "Finished"
-
-	# 3. Physics & Visuals
+	
 	var final_target = sim_target_pos
 	if check.capability == "Cannot fly":
 		final_target.y = 0.0
+	drone_root.position = drone_root.position.lerp(final_target, fp.climb)
 	
-	drone_root.position = drone_root.position.lerp(final_target, 0.05)
-	
-	# DYNAMIC TILT: Drone must pitch DOWN to go forward
 	var displacement = (sim_target_pos - drone_root.position)
 	var dynamic_pitch = clamp(displacement.z * 0.3, -0.3, 0.3)
-	var dynamic_roll = clamp(-displacement.x * 0.3, -0.3, 0.3)
+	var dynamic_roll  = clamp(-displacement.x * 0.3, -0.3, 0.3)
 	
-	var tilt_x = check.tilt_x * 0.2 + dynamic_pitch + sin(sim_time*1.5)*0.01
-	var tilt_z = check.tilt_z * 0.2 + dynamic_roll + cos(sim_time*1.5)*0.01
+	var tilt_x = check.tilt_x * 0.2 + dynamic_pitch + sin(sim_time * 1.5) * 0.01
+	var tilt_z = check.tilt_z * 0.2 + dynamic_roll  + cos(sim_time * 1.5) * 0.01
 	
-	drone_root.rotation.x = lerp(drone_root.rotation.x, tilt_x, 0.1)  # ← ĐỔI
-	drone_root.rotation.z = lerp(drone_root.rotation.z, tilt_z, 0.1)
+	drone_root.rotation.x = lerp(drone_root.rotation.x, tilt_x, fp.responsiveness)
+	drone_root.rotation.z = lerp(drone_root.rotation.z, tilt_z, fp.responsiveness)
 #-===============moi add vao
 
 #=========================================
