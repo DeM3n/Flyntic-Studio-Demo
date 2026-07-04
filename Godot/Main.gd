@@ -97,89 +97,7 @@ var BLOCK_CATEGORIES := {
 var _active_block_cat := "BtnE"
 
 var _block_cat_collapsed  := {}  # { "Events": false, "Flight": true, ... }
-var COMPONENTS := {
-	"PVC Pipe Frame": {
-		"type": "Frame", "weight": 250, "thrust": 0, "capacity": 0,
-		"color": Color(0.9, 0.9, 0.85),
-		"use_obj": true, "obj_path": "res://Components/quad_pvc_frame.obj",
-		"ports": [
-			{"name": "fl", "pos": Vector3(2.28, 2.01, 2.28), "slot": true, "allowed": ["Motor"]},
-			{"name": "fr", "pos": Vector3(2.28, 2.01, -2.28), "slot": true, "allowed": ["Motor"]},
-			{"name": "bl", "pos": Vector3(-2.28, 2.01, 2.28), "slot": true, "allowed": ["Motor"]},
-			{"name": "br", "pos": Vector3(-2.28, 2.01, -2.28), "slot": true, "allowed": ["Motor"]},
-			#{"name": "center_top", "pos": Vector3(0, 1.8, 0), "slot": true, "allowed": ["FC", "ESC"]},
-			{"name": "fc_slot", "pos": Vector3(0, 1.8, 0), "slot": true, "allowed": ["FC"]},
-			{"name": "esc_slot", "pos": Vector3(0, 1.2, 0), "slot": true, "allowed": ["ESC"]},
-			{"name": "center_bot", "pos": Vector3(0, 0.5, 0), "slot": true, "allowed": ["Battery"]},
-		],
-		"ground_offset": 0.0
-	},
-	"Carbon Fiber Body": {
-		"type": "Frame", "weight": 180, "thrust": 0, "capacity": 0,
-		"color": Color(0.4, 0.4, 0.42),
-		"use_obj": false,
-		"ports": [
-			{"name": "fl", "pos": Vector3(2, 1.5, 2), "slot": true, "allowed": ["Motor"]},
-			{"name": "fr", "pos": Vector3(2, 1.5, -2), "slot": true, "allowed": ["Motor"]},
-			{"name": "bl", "pos": Vector3(-2, 1.5, 2), "slot": true, "allowed": ["Motor"]},
-			{"name": "br", "pos": Vector3(-2, 1.5, -2), "slot": true, "allowed": ["Motor"]},
-			{"name": "center", "pos": Vector3(0, 1.0, 0), "slot": true, "allowed": ["FC", "Battery", "ESC"]},
-		],
-		"ground_offset": 0.0
-	},
-	"Motor 2205 2300KV": {
-		"type": "Motor", "weight": 35, "thrust": 850, "capacity": 0,"kv": 2300,
-		"max_current": 28,
-		"color": Color(0.6, 0.25, 0.25),
-		"ground_offset": 0.3,
-		"ports": [{"name": "prop", "pos": Vector3(0, 0.5, 0), "slot": true, "allowed": ["Propeller"]}]
-	},
-	"Motor 2207 2400KV": {
-		"type": "Motor", "weight": 42, "thrust": 1100, "capacity": 0,"kv": 2400,
-		"max_current": 33,
-		"color": Color(0.25, 0.45, 0.8),
-		"ground_offset": 0.3,
-		"ports": [{"name": "prop", "pos": Vector3(0, 0.5, 0), "slot": true, "allowed": ["Propeller"]}]
-	},
-	"Motor 2212 920KV": {
-		"type": "Motor", "weight": 56, "thrust": 980, "capacity": 0,"kv": 920,
-		"max_current": 18,
-		"color": Color(0.8, 0.55, 0.1),
-		"ground_offset": 0.3,
-		"ports": [{"name": "prop", "pos": Vector3(0, 0.5, 0), "slot": true, "allowed": ["Propeller"]}]
-	},
-	"Propeller 5045": {
-		"type": "Propeller", "weight": 8, "thrust": 0, "capacity": 0,
-		"thrust_mult": 1.0,
-		"kv_range": Vector2(1900, 2600),
-		"ground_offset": 0.07,
-		"color": Color(0.8, 0.1, 0.1), "ports": []
-	},
-	"Propeller 6045": {
-		"type": "Propeller", "weight": 12, "thrust": 0, "capacity": 0,
-		"thrust_mult": 1.18,
-		"kv_range": Vector2(1400, 2100),
-		"ground_offset": 0.07,
-		"color": Color(0.1, 0.1, 0.8), "ports": []
-	},
-	"Lipo 4S 1500mAh": {
-		"type": "Battery", "weight": 185, "thrust": 0, "capacity": 1500,
-		"cells": 4,   
-		"current_rating": 45,
-		"ground_offset": 0.1,
-		"color": Color(0.85, 0.7, 0.15), "ports": []
-	},
-	"F4 Flight Controller": {
-		"type": "FC", "weight": 7, "thrust": 0, "capacity": 0,
-		 "ground_offset": 0.1,
-		"color": Color(0.0, 0.35, 0.0), "ports": []
-	},
-	"4-in-1 ESC": {
-		"type": "ESC", "weight": 15, "thrust": 0, "capacity": 0,
-		 "ground_offset": 0.1,
-		"color": Color(0.0, 0.0, 0.5), "ports": []
-	},
-}
+
 
 # Runtime state
 var placed: Array[Dictionary] = []
@@ -902,7 +820,8 @@ func _input(event):
 									var ghit = gp.intersects_ray(ro, rd)
 									if ghit:
 										#_place(cur_id, ghit + Vector3(0, 0.3, 0))
-										var offset_y = COMPONENTS[cur_id].get("ground_offset", 0.3)
+										#var offset_y = COMPONENTS[cur_id].get("ground_offset", 0.3)
+										var offset_y = ComponentFactory.COMPONENTS[cur_id].get("ground_offset", 0.3)
 										_place(cur_id, ghit + Vector3(0, offset_y, 0))
 										_re_place_ghost_children(-1)
 										_cancel_ghost()
@@ -1115,18 +1034,18 @@ func _find_snap() -> Variant:
 			best_d = d
 			best = {
 				"pos": hint.global_position, 
-				"port": hint.name,
+				"port": hint.get_meta("port_name", hint.name),
 				"parent_uid": hint.get_meta("parent_uid", -1)
 			}
 	return best
 
 func _show_snap_hints(id: String):
 	_clear_children(snap_hints)
-	var cdata = COMPONENTS[id]
+	var cdata = ComponentFactory.COMPONENTS[id]
 	# Scan ALL placed components for matching ports
 	for comp in placed:
 		if not is_instance_valid(comp.get("node")): continue
-		var ports = COMPONENTS[comp.id].get("ports", [])
+		var ports = ComponentFactory.COMPONENTS[comp.id].get("ports", [])
 		for port in ports:
 			if port.get("slot", false) and port.get("allowed", []).has(cdata.type):
 				# Check port not already occupied
@@ -1137,7 +1056,6 @@ func _show_snap_hints(id: String):
 						break
 				if occupied:
 					continue
-
 				var hint = MeshInstance3D.new()
 				var torus = TorusMesh.new()
 				torus.inner_radius = 0.15
@@ -1154,6 +1072,7 @@ func _show_snap_hints(id: String):
 				snap_hints.add_child(hint)
 				hint.global_position = comp.node.global_transform * port.pos
 				hint.set_meta("parent_uid", comp.uid)
+				hint.set_meta("port_name", port.name)
 
 func _cancel_ghost():
 	if ghost:
@@ -1176,15 +1095,15 @@ func _ghost_tint(c: Color):
 
 # ──────────────────────────── PLACE & WIRE ────────────────────────
 var drone_root: Node3D = null
-
+var _uid_counter: int = 0
+func _next_uid() -> int:
+	_uid_counter += 1
+	return _uid_counter
 func _place(id: String, pos: Vector3, port_name: String = "", parent_uid: int = -1,force_uid: int = -1):
 	var node = _build_mesh(id, false)
-	#node.global_position = pos
-	
-	#var uid = Time.get_ticks_msec() # Unique ID
-	var uid = force_uid if force_uid != -1 else Time.get_ticks_msec()  # dùng uid cũ nếu có
-
-	var cdata = COMPONENTS[id]
+	#var uid = force_uid if force_uid != -1 else Time.get_ticks_msec()  # dùng uid cũ nếu có
+	var uid = force_uid if force_uid != -1 else _next_uid()
+	var cdata = ComponentFactory.COMPONENTS[id]
 	var entry := {
 		"uid": uid, "id": id, "type": cdata.type,
 		"node": node, "port_name": port_name,
@@ -1291,55 +1210,71 @@ func _bezier3(a: Vector3, b: Vector3, c: Vector3, t: float) -> Vector3:
 	var bc = b.lerp(c, t)
 	return ab.lerp(bc, t)
 
-# ──────────────────────────── BUILD MESH ──────────────────────────
+## ──────────────────────────── BUILD MESH ──────────────────────────
+#
+#func _build_mesh(id: String, is_ghost: bool) -> Node3D:
+	#var cdata = ComponentFactory.COMPONENTS[id]  # đổi COMPONENTS -> ComponentFactory.COMPONENTS
+	#var root = Node3D.new()
+#
+	#if cdata.get("use_obj", false):
+		#_build_frame_from_obj(root, cdata)
+	#elif cdata.type == "Frame":
+		#_build_frame_procedural(root)  # Frame giữ nguyên logic riêng trong main.gd
+	#else:
+		#ComponentFactory.build(root, id)  # Motor/Propeller/Battery/FC/ESC đều qua đây
+#
+	#var mat = StandardMaterial3D.new()
+	#if is_ghost:
+		#mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+		#mat.albedo_color = Color(0, 1, 0.8, 0.3)
+	#else:
+		#var raw_c = cdata.color
+		#mat.albedo_color = Color(min(raw_c.r * 1.3, 1.0), min(raw_c.g * 1.3, 1.0), min(raw_c.b * 1.3, 1.0))
+		#mat.metallic = 0.0
+		#mat.roughness = 0.5
+		#mat.specular = 0.3
+	#_apply_material_recursive(root, mat)
+	#return root
+#func _apply_material_recursive(node: Node, mat: Material):
+	#for ch in node.get_children():
+		#if ch is MeshInstance3D:
+			#ch.material_override = mat
+		#if ch.get_child_count() > 0:
+			#_apply_material_recursive(ch, mat)
 func _build_mesh(id: String, is_ghost: bool) -> Node3D:
-	var cdata = COMPONENTS[id]
+	var cdata = ComponentFactory.COMPONENTS[id]
 	var root = Node3D.new()
-
-	# Check if this component uses an OBJ model file
 	if cdata.get("use_obj", false):
 		_build_frame_from_obj(root, cdata)
+	elif cdata.type == "Frame":
+		_build_frame_procedural(root)
 	else:
-		match cdata.type:
-			"Frame":
-				_build_frame_procedural(root)
-			"Motor":
-				_build_motor(root)
-			"Propeller":
-				_build_propeller(root)
-			"Battery":
-				_build_battery(root)
-			"FC":
-				_build_fc(root)
-			"ESC":
-				_build_esc(root)
-			_:
-				var m = MeshInstance3D.new()
-				m.mesh = BoxMesh.new()
-				root.add_child(m)
+		ComponentFactory.build(root, id)
 
-	var mat = StandardMaterial3D.new()
 	if is_ghost:
-		mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-		mat.albedo_color = Color(0, 1, 0.8, 0.3)
+		var ghost_mat = StandardMaterial3D.new()
+		ghost_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+		ghost_mat.albedo_color = Color(0, 1, 0.8, 0.3)
+		# ghost preview: ép toàn bộ về 1 màu xanh trong suốt, kể cả phần đã có màu riêng
+		_apply_material_recursive(root, ghost_mat, true)
 	else:
 		var raw_c = cdata.color
-		# Make it pop even more
+		var mat = StandardMaterial3D.new()
 		mat.albedo_color = Color(min(raw_c.r * 1.3, 1.0), min(raw_c.g * 1.3, 1.0), min(raw_c.b * 1.3, 1.0))
-		mat.metallic = 0.0 # No reflections to avoid black artifacts
-		mat.roughness = 0.5 # Balanced matte
+		mat.metallic = 0.0
+		mat.roughness = 0.5
 		mat.specular = 0.3
-
-	_apply_material_recursive(root, mat)
+		# chỉ tô các mesh CHƯA có màu riêng, giữ nguyên phần đã tự tô trong ComponentFactory
+		_apply_material_recursive(root, mat, false)
 	return root
 
-func _apply_material_recursive(node: Node, mat: Material):
+func _apply_material_recursive(node: Node, mat: Material, force: bool = true):
 	for ch in node.get_children():
 		if ch is MeshInstance3D:
-			ch.material_override = mat
+			if force or ch.get_surface_override_material(0) == null:
+				ch.material_override = mat
 		if ch.get_child_count() > 0:
-			_apply_material_recursive(ch, mat)
-
+			_apply_material_recursive(ch, mat, force)
 func _build_frame_from_obj(root: Node3D, cdata: Dictionary):
 	# Load the real OBJ model
 	var obj_path = cdata.get("obj_path", "")
@@ -1438,62 +1373,7 @@ func _build_frame_procedural(root: Node3D):
 
 	root.position.y = 0.7
 
-func _build_motor(root: Node3D):
-	# Stator
-	var st = MeshInstance3D.new()
-	st.mesh = CylinderMesh.new()
-	st.mesh.top_radius = 0.4
-	st.mesh.bottom_radius = 0.4
-	st.mesh.height = 0.5
-	root.add_child(st)
-	# Bell/Rotor
-	var bell = MeshInstance3D.new()
-	bell.mesh = CylinderMesh.new()
-	bell.mesh.top_radius = 0.45
-	bell.mesh.bottom_radius = 0.45
-	bell.mesh.height = 0.2
-	bell.position.y = 0.25
-	root.add_child(bell)
-	# Shaft
-	var shaft = MeshInstance3D.new()
-	shaft.mesh = CylinderMesh.new()
-	shaft.mesh.top_radius = 0.1
-	shaft.mesh.bottom_radius = 0.1
-	shaft.mesh.height = 0.3
-	shaft.position.y = 0.5
-	root.add_child(shaft)
 
-func _build_propeller(root: Node3D):
-	var blade = MeshInstance3D.new()
-	blade.mesh = BoxMesh.new()
-	blade.mesh.size = Vector3(4.5, 0.04, 0.25)
-	blade.name = "prop_blade"
-	root.add_child(blade)
-	var hub = MeshInstance3D.new()
-	hub.mesh = CylinderMesh.new()
-	hub.mesh.top_radius = 0.12
-	hub.mesh.bottom_radius = 0.12
-	hub.mesh.height = 0.08
-	root.add_child(hub)
-
-func _build_battery(root: Node3D):
-	var body = MeshInstance3D.new()
-	body.mesh = BoxMesh.new()
-	# Resized to be more realistic (smaller relative to the frame)
-	body.mesh.size = Vector3(1.2, 0.6, 2.8)
-	root.add_child(body)
-
-func _build_fc(root: Node3D):
-	var pcb = MeshInstance3D.new()
-	pcb.mesh = BoxMesh.new()
-	pcb.mesh.size = Vector3(1.5, 0.08, 1.5)
-	root.add_child(pcb)
-
-func _build_esc(root: Node3D):
-	var body = MeshInstance3D.new()
-	body.mesh = BoxMesh.new()
-	body.mesh.size = Vector3(1.0, 0.25, 1.8)
-	root.add_child(body)
 
 # ──────────────────────────── SIMULATION ──────────────────────────
 func _on_play():
@@ -1573,7 +1453,7 @@ func _on_play():
 				prop_parents.append(c.parent_id)
 		
 		for c in placed:
-			var d = COMPONENTS[c.id]
+			var d = ComponentFactory.COMPONENTS[c.id]
 			tw += d.weight
 			tt += d.thrust
 			if d.type == "Motor":
@@ -1768,7 +1648,7 @@ func _get_flight_params() -> Dictionary:
 	if drone_root == null or placed.is_empty():
 		return {"speed": 1.0, "climb": 0.05, "responsiveness": 0.1}
 	
-	var props = DronePhysicsModel.compute_mass_properties(placed, COMPONENTS, drone_root)
+	var props = DronePhysicsModel.compute_mass_properties(placed, ComponentFactory.COMPONENTS, drone_root)
 	var twr = DronePhysicsModel.thrust_to_weight_ratio(props.motors, props.total_mass_kg)
 	
 	# TWR 2.0 = mức chuẩn (baseline), drone vừa đủ bay ổn
@@ -1778,18 +1658,18 @@ func _get_flight_params() -> Dictionary:
 	var total_kv := 0.0
 	var motor_count := 0
 	for comp in placed:
-		var def: Dictionary = COMPONENTS.get(comp.get("id", ""), {})
+		var def: Dictionary = ComponentFactory.COMPONENTS.get(comp.get("id", ""), {})
 		if def.get("type", "") == "Motor":
 			total_kv += def.get("kv", 1500.0)   # 1500 = fallback nếu chưa có field kv
 			motor_count += 1
 	var avg_kv: float = total_kv / max(motor_count, 1)   # <-- dòng bị thiếu, đã thêm lại
 
-	var voltage := DronePhysicsModel.get_battery_voltage(placed, COMPONENTS)
-	var mismatch_factor := DronePhysicsModel.get_kv_mismatch_factor(placed, COMPONENTS, avg_kv)
+	var voltage := DronePhysicsModel.get_battery_voltage(placed, ComponentFactory.COMPONENTS)
+	var mismatch_factor := DronePhysicsModel.get_kv_mismatch_factor(placed, ComponentFactory.COMPONENTS, avg_kv)
 	# kv_factor giờ tính theo RPM tham chiếu thật (KV × V), không chỉ KV thô
 	var rpm_ref := 1500.0 * 14.8  # baseline: 1500KV @ 4S
 	var kv_factor: float = clamp((avg_kv * voltage) / rpm_ref, 0.4, 2.0)
-	var esc_factor := DronePhysicsModel.get_esc_overload_factor(placed, COMPONENTS)
+	var esc_factor := DronePhysicsModel.get_esc_overload_factor(placed, ComponentFactory.COMPONENTS)
 	return {
 		"speed": speed_factor * mismatch_factor * esc_factor,
 		"climb": 0.03 * speed_factor * mismatch_factor * esc_factor,
@@ -2020,15 +1900,15 @@ func _calculate_stats() -> Dictionary:
 	for c in placed:
 		if not _is_in_drone(c.node):
 			continue
-		var d = COMPONENTS[c.id]
+		var d = ComponentFactory.COMPONENTS[c.id]
 		tw += d.weight
 		bat_cap += d.get("capacity", 0)
 
 		if d.type == "Motor":
 			var mult = 1.0
 			for child in placed:
-				if child.parent_id == c.uid and COMPONENTS[child.id].type == "Propeller":
-					mult = COMPONENTS[child.id].get("thrust_mult", 1.0)
+				if child.parent_id == c.uid and ComponentFactory.COMPONENTS[child.id].type == "Propeller":
+					mult = ComponentFactory.COMPONENTS[child.id].get("thrust_mult", 1.0)
 					break
 			tt += d.thrust * mult
 
@@ -2112,32 +1992,35 @@ func _highlight_component(uid: int):
 			_log("Found component: " + c.id + " | Meshes found:", "info")
 			
 			var tween = create_tween()
-			var mesh_count = 0
+			var meshes: Array[MeshInstance3D] = []
+			_collect_meshes_recursive(node, meshes)  # tìm sâu toàn bộ cây con
 			
-			for child in node.get_children():
-				if child is MeshInstance3D:
-					mesh_count += 1
-					var mat = child.material_override
-					if mat:
-						var original_scale = child.scale  # ← lưu scale gốc
-						_log("  → Animating mesh: " + child.name, "success")
-						tween.tween_property(mat, "emission_enabled", true, 0)
-						tween.tween_property(mat, "emission", Color(0, 0.8, 1), 0.2)
-						tween.tween_property(mat, "emission_energy_multiplier", 10.0, 0.2)
-						tween.tween_property(child, "scale", original_scale * 1.1, 0.2)  # ← nhân với gốc
-						tween.tween_property(mat, "emission_energy_multiplier", 0.0, 0.4)
-						tween.tween_property(child, "scale", original_scale, 0.4)  # ← về đúng gốc
-						tween.tween_property(mat, "emission_enabled", false, 0)
+			for child in meshes:
+				var mat = child.material_override
+				if mat:
+					var original_scale = child.scale
+					_log("  → Animating mesh: " + child.name, "success")
+					tween.tween_property(mat, "emission_enabled", true, 0)
+					tween.tween_property(mat, "emission", Color(0, 0.8, 1), 0.2)
+					tween.tween_property(mat, "emission_energy_multiplier", 10.0, 0.2)
+					tween.tween_property(child, "scale", original_scale * 1.1, 0.2)
+					tween.tween_property(mat, "emission_energy_multiplier", 0.0, 0.4)
+					tween.tween_property(child, "scale", original_scale, 0.4)
+					tween.tween_property(mat, "emission_enabled", false, 0)
 			
-			if mesh_count == 0:
-				_log("No MeshInstance3D found at root level!", "warning")
-			
-			# Bỏ tween.finished vì tween đã tự reset về original_scale rồi
+			if meshes.is_empty():
+				_log("No MeshInstance3D found (recursive)!", "warning")
 			
 			return
 	
 	_log("Highlight failed: UID not found in placed", "error")
 
+# Hàm phụ: quét toàn bộ cây con để tìm MeshInstance3D, bất kể lồng sâu bao nhiêu cấp
+func _collect_meshes_recursive(node: Node, result: Array[MeshInstance3D]) -> void:
+	if node is MeshInstance3D:
+		result.append(node)
+	for child in node.get_children():
+		_collect_meshes_recursive(child, result)
 func _remove_selected():
 	var item = hier_tree.get_selected()
 	if item and item.get_parent(): # Don't delete root
@@ -2257,8 +2140,6 @@ func _build_hierarchy_tree():
 			_create_hier_item(comp, parent_item)
 	
 
-
-
 # Tạo một item trong Tree
 func _create_hier_item(comp: Dictionary, parent_item: TreeItem) -> TreeItem:
 	var item = hier_tree.create_item(parent_item)
@@ -2347,9 +2228,9 @@ func _build_comp_list():
 	for cat in CATEGORIES:
 		var visible_items: Array = []
 		for cid in CATEGORIES[cat]:
-			if not COMPONENTS.has(cid):
+			if not ComponentFactory.COMPONENTS.has(cid):
 				continue
-			var c = COMPONENTS[cid]
+			var c = ComponentFactory.COMPONENTS[cid]
 			if _active_filters.size() > 0:
 				if not c.type.to_lower() in _active_filters:
 					continue
@@ -2380,7 +2261,7 @@ func _build_comp_list():
 		for cid in visible_items:
 			var ii = comp_list.add_item("      " + cid)  # tăng indent
 			comp_list.set_item_metadata(ii, {"is_category": false, "id": cid})
-			var c = COMPONENTS[cid]
+			var c = ComponentFactory.COMPONENTS[cid]
 			match c.type:
 				"Motor":    comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.4, 0.4))
 				"Battery":  comp_list.set_item_custom_fg_color(ii, Color(0.9, 0.8, 0.2))
@@ -2647,7 +2528,7 @@ func _re_place_ghost_children(parent_uid_hint: int):
 		# Dùng đúng port_name cũ, tính lại world pos từ port
 		var port_name = child_info.get("port_name", "")
 		var target_pos = real_parent.node.global_position
-		var ports = COMPONENTS[real_parent.id].get("ports", [])
+		var ports = ComponentFactory.COMPONENTS[real_parent.id].get("ports", [])
 		for port in ports:
 			if port.name == port_name:
 				target_pos = real_parent.node.global_transform * port.pos
@@ -2743,6 +2624,7 @@ func _setup_file_buttons():
 
 func _on_new():
 	_current_path = ""
+	_uid_counter = 0 
 	_clear_all()
 	_place("PVC Pipe Frame", Vector3.ZERO)
 	_update_all()
@@ -2870,12 +2752,24 @@ func _serialize_blocks() -> Dictionary:
 # ── Deserialize ────────────────────────────────────────────────────
 func _deserialize_3d(data: Dictionary):
 	var items = data.get("placed", [])
-	# Sort: Frame (parent_id == -1) trước, component con sau
 	items.sort_custom(func(a, b): return a.get("parent_id", -1) < b.get("parent_id", -1))
+	
+	var max_uid = 0
 	for p in items:
 		var pos = Vector3(p.pos[0], p.pos[1], p.pos[2])
 		_place(p.id, pos, p.get("port_name", ""), p.get("parent_id", -1), p.get("uid", -1))
-
+		max_uid = max(max_uid, p.get("uid", -1) as int)
+	
+	_uid_counter = max_uid
+		# Force flush transform toàn bộ cây sau khi load xong
+	for p in placed:
+		if is_instance_valid(p.node):
+			p.node.force_update_transform()
+func _force_update_recursive(node: Node) -> void:
+	if node is Node3D:
+		node.force_update_transform()
+	for ch in node.get_children():
+		_force_update_recursive(ch)
 func _deserialize_blocks(data: Dictionary):
 	for child in workspace.get_children():
 		if "block_type" in child:

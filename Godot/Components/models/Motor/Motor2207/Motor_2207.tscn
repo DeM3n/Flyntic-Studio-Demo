@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://bc5j87krgc3me"]
+
+[ext_resource type="PackedScene" uid="uid://bvfvgxtunclsg" path="res://Components/models/Motor/Motor2207/Motor2207.glb" id="1_hync5"]
+
+[node name="Motor6045" unique_id=1478816273 instance=ExtResource("1_hync5")]
+
+[node name="model" parent="." index="0" unique_id=1430337736]
+transform = Transform3D(0.5, 0, 0, 0, -2.1855694e-08, -0.45, 0, 0.5, -1.9670125e-08, 0, 0, 0)

@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://c4xbys88solp8"]
+
+[ext_resource type="PackedScene" uid="uid://ci00d4ffm2xl7" path="res://Components/models/Propeller_5045/Propeller_5045.glb" id="1_0avvi"]
+
+[node name="Propeller_5045" unique_id=670695208 instance=ExtResource("1_0avvi")]
+transform = Transform3D(1.6, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 0, 0, 0)

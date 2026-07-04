@@ -184,10 +184,11 @@ func _build_offer_ui(vbox: VBoxContainer):
 
 func _build_expired_ui(vbox: VBoxContainer):
 	# Icon
-	var icon = Label.new()
+	var icon = TextureRect.new()
 	icon.texture = load("res://Assets/hourglass.svg")
-	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon.add_theme_font_size_override("font_size", 40)
+	icon.custom_minimum_size = Vector2(40, 40)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # để icon tự căn giữa trong vbox
 	vbox.add_child(icon)
 
 	# Title
