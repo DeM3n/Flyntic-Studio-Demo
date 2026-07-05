@@ -165,10 +165,6 @@ func _ready():
 	_create_block("start", "When ⚐ clicked", Color(0.85, 0.65, 0), Vector2(50, 50))
 	# Initialize physics bridge
 	_init_bridge()
-	#var w2d = load("res://Wiring.gd").new()
-	#w2d.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	#tabs.add_child(w2d)
-	#wiring_panel = w2d
 	var w2d = load("res://Wiring.gd").new() 
 	w2d.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT) 
 	wiring_panel = w2d # KHÔNG add_child(w2d) vào tabs nữa — DockManager tự xử lý 
@@ -205,7 +201,7 @@ func _ready():
 
 	_fix_responsive_layout()
 	_fix_right_panel_labels()
-
+	add_to_group("main_controller")
 
 
 func _fix_right_panel_labels() -> void:
@@ -1956,12 +1952,6 @@ func _update_all():
 	_build_hierarchy_tree()
 
 func _on_hier_item_selected():
-	#var item = hier_tree.get_selected()
-	#if item:
-		#var uid = item.get_metadata(0)
-		#if uid != null:
-			#_highlight_component(uid)
-			#_log("Selected: " + item.get_text(0), "info")
 	var item = hier_tree.get_selected()
 	if item:
 		# Chặn highlight khi click cột lock
@@ -1972,6 +1962,7 @@ func _on_hier_item_selected():
 			return
 		var uid = item.get_metadata(0)
 		if uid != null:
+			_selected_uid = uid
 			_highlight_component(uid)
 			_log("Selected: " + item.get_text(0), "info")
 
@@ -2428,6 +2419,8 @@ func _pick_existing():
 
 	_rebuild_wires()
 	_update_all()
+	if _selected_uid == best_uid:
+		_selected_uid = -1
 
 func _collect_children_recursive(parent_uid: int, parent_node: Node3D, depth: int = 0) -> Array:
 	var result = []
@@ -2452,6 +2445,8 @@ func _collect_children_recursive(parent_uid: int, parent_node: Node3D, depth: in
 	return result
 
 func _remove_component(uid: int):
+	if _selected_uid == uid:
+		_selected_uid = -1
 	var found_idx = -1
 	for i in range(placed.size()):
 		if placed[i].uid == uid:
@@ -2611,15 +2606,20 @@ func _setup_file_buttons():
 	
 	var popup = menu_btn.get_popup()
 	popup.add_theme_font_size_override("font_size", 12)
-	popup.add_item("New",  0)
-	popup.add_item("Open", 1)
-	popup.add_item("Save", 2)
-	
+	popup.add_item("Open", 0)
+	popup.add_item("Save", 1)
+	popup.add_item("Save As", 2)
+	popup.add_separator()
+	popup.add_item("Import", 3)
+	popup.add_item("Export", 4)
 	popup.id_pressed.connect(func(id: int):
 		match id:
-			0: _on_new()
-			1: _on_open()
-			2: _on_save()
+			#0: _on_new()
+			0: _on_open()
+			1: _on_save()
+			2: _on_save_as()
+			3: _on_import()
+			4: _on_export()
 	)
 
 func _on_new():
@@ -2722,6 +2722,101 @@ func _read_project(path: String):
 	_update_all()
 	_log("Opened: " + path.get_file(), "success")
 	_register_project(path)
+# ─────────────────────────── IMPORT ───────────────────────────
+func _on_import():
+	var dialog = FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dialog.filters   = ["*.flyntic ; Flyntic Project"]
+	dialog.access    = FileDialog.ACCESS_FILESYSTEM
+	dialog.min_size  = Vector2i(640, 420)
+	add_child(dialog)
+	dialog.popup_centered()
+	dialog.file_selected.connect(func(path: String):
+		_import_project(path)
+		dialog.queue_free()
+	)
+	dialog.canceled.connect(func(): dialog.queue_free())
+
+func _import_project(path: String):
+	var file = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_log("Import failed", "error")
+		return
+	var json = JSON.new()
+	if json.parse(file.get_as_text()) != OK:
+		_log("Parse error: " + json.get_error_message(), "error")
+		file.close()
+		return
+	file.close()
+	var data = json.data
+
+	# --- canvas_3d ---
+	var uid_map := {}
+	var next_uid = _uid_counter
+	if data.has("canvas_3d"):
+		var items = data.canvas_3d.get("placed", [])
+		items.sort_custom(func(a, b): return a.get("parent_id", -1) < b.get("parent_id", -1))
+		for p in items:
+			var old_uid = p.get("uid", -1)
+			next_uid += 1
+			uid_map[old_uid] = next_uid
+			var new_parent = uid_map.get(p.get("parent_id", -1), -1)
+			var pos = Vector3(p.pos[0], p.pos[1], p.pos[2])
+			_place(p.id, pos, p.get("port_name", ""), new_parent, next_uid)
+	_uid_counter = next_uid
+
+	# --- wiring_2d ← dòng bạn hỏi nằm ở đây ---
+	if data.has("wiring_2d") and wiring_panel:
+		wiring_panel.import_merge(data.wiring_2d)   # bỏ tham số {} vì import_merge chỉ nhận 1 tham số
+
+	# --- blocks ---
+	if data.has("blocks"):
+		for b in data.blocks.get("blocks", []):
+			var col = Color(0.85, 0.65, 0.0)
+			for cat in BLOCK_CATEGORIES.values():
+				for bdef in cat.blocks:
+					if bdef.type == b.type:
+						col = bdef.color
+			_create_block(b.type, b.label, col, Vector2(b.pos[0] + 40, b.pos[1] + 40))
+
+	for p in placed:
+		if is_instance_valid(p.node):
+			p.node.force_update_transform()
+
+	_update_all()
+	_log("Imported: " + path.get_file(), "success")
+
+
+# ─────────────────────────── EXPORT ───────────────────────────
+func _on_export():
+	var dialog = FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	dialog.filters   = ["*.flyntic ; Flyntic Project"]
+	dialog.access    = FileDialog.ACCESS_FILESYSTEM
+	dialog.min_size  = Vector2i(640, 420)
+	add_child(dialog)
+	dialog.popup_centered()
+	dialog.file_selected.connect(func(path: String):
+		_export_project(path)
+		dialog.queue_free()
+	)
+	dialog.canceled.connect(func(): dialog.queue_free())
+
+func _export_project(path: String):
+	var data := {
+		"version":   1,
+		"canvas_3d": _serialize_3d(),
+		"wiring_2d": wiring_panel.serialize() if wiring_panel else {},
+		"blocks":    _serialize_blocks(),
+	}
+	var file = FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		_log("Export failed", "error")
+		return
+	file.store_string(JSON.stringify(data, "\t"))
+	file.close()
+	_log("Exported: " + path.get_file(), "success")
+	# không set _current_path, không _register_project
 
 # ── Serialize ──────────────────────────────────────────────────────
 func _serialize_3d() -> Dictionary:
@@ -2860,3 +2955,89 @@ func _fix_responsive_layout() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_SIZE_CHANGED:
 		_fix_responsive_layout()
+
+# ─────────────────────── EDIT MENU SUPPORT (Canvas) ───────────────
+var _clipboard: Dictionary = {}
+
+var _selected_uid: int = -1
+
+func _get_selected_uid() -> int:
+	return _selected_uid
+
+func _find_placed_by_uid(uid: int) -> Dictionary:
+	for p in placed:
+		if p.uid == uid:
+			return p
+	return {}
+
+func canvas_copy_selected() -> void:
+	var uid = _get_selected_uid()
+	print(">>> canvas_copy_selected: uid = ", uid)
+	if uid == -1:
+		return
+	var comp = _find_placed_by_uid(uid)
+	if comp.is_empty():
+		return
+	_clipboard = {
+		"id":        comp.id,
+		"port_name": comp.port_name,
+		"parent_id": comp.parent_id,
+		"pos":       [comp.node.global_position.x, comp.node.global_position.y, comp.node.global_position.z],
+	}
+	_log("Copied: " + comp.id, "success")
+
+func canvas_paste() -> void:
+	if _clipboard.is_empty():
+		return
+	var offset := Vector3(0.2, 0, 0.2)
+	var pos := Vector3(_clipboard.pos[0], _clipboard.pos[1], _clipboard.pos[2]) + offset
+	var new_uid := _uid_counter + 1
+	UndoRedoManager.begin("Paste component")
+	UndoRedoManager.add_do(self, "_place", [_clipboard.id, pos, _clipboard.port_name, _clipboard.parent_id, new_uid])
+	UndoRedoManager.add_undo(self, "_remove_component", [new_uid])
+	UndoRedoManager.commit()
+	_uid_counter = new_uid
+	_update_all()
+	_log("Pasted: " + _clipboard.id, "success")
+
+func canvas_delete_selected() -> void:
+	var uid = _get_selected_uid()
+	if uid == -1:
+		return
+	if uid in locked_uids:
+		_log("Component is locked.", "warn")
+		return
+	var comp = _find_placed_by_uid(uid)
+	if comp.is_empty():
+		return
+	if comp.type == "Frame":
+		_log("Cannot remove the main frame!", "error")
+		return
+	var comp_snapshot := {
+		"id": comp.id, "port_name": comp.port_name,
+		"parent_id": comp.parent_id, "pos": comp.node.global_position, "uid": uid,
+	}
+	var children_snapshot := []
+	for other in placed:
+		if other.get("parent_id", -1) == uid:
+			children_snapshot.append({
+				"uid": other.uid, "old_parent_id": other.parent_id, "old_port_name": other.port_name,
+			})
+	UndoRedoManager.begin("Delete component")
+	UndoRedoManager.add_do(self, "_remove_component", [uid])
+	UndoRedoManager.add_undo(self, "_restore_deleted_component", [comp_snapshot, children_snapshot])
+	UndoRedoManager.commit()
+
+func _restore_deleted_component(comp_snapshot: Dictionary, children_snapshot: Array) -> void:
+	_place(comp_snapshot.id, comp_snapshot.pos, comp_snapshot.port_name, comp_snapshot.parent_id, comp_snapshot.uid)
+	for cs in children_snapshot:
+		var child = _find_placed_by_uid(cs.uid)
+		if child.is_empty():
+			continue
+		child["parent_id"] = cs.old_parent_id
+		child["port_name"] = cs.old_port_name
+	_rebuild_wires()
+	_update_all()
+
+func canvas_select_all() -> void:
+	_log("Select All: Canvas dùng single-select Tree, chưa hỗ trợ đa chọn", "warn")

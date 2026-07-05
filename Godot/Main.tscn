@@ -4,8 +4,10 @@
 [ext_resource type="Script" uid="uid://cyry3cj88i1we" path="res://m_8.gd" id="2_cm0pq"]
 [ext_resource type="Script" uid="uid://lg1j88inmrl3" path="res://User/UserMenu.gd" id="2_fos0i"]
 [ext_resource type="Script" uid="uid://b2c633c88u7wr" path="res://tutorial_overlay.gd" id="2_uu6xs"]
+[ext_resource type="Script" uid="uid://btt7jui1o7o3q" path="res://Scripts/Menu/EditControllerMenu.gd" id="3_lgr22"]
 [ext_resource type="Shader" uid="uid://cihs6j4ireknf" path="res://Highlight.gdshader" id="3_r0du0"]
 [ext_resource type="Script" uid="uid://dhkeer7bo06oa" path="res://Scripts/Dock/DockerManager.gd" id="4_3dxm6"]
+[ext_resource type="Script" uid="uid://dcbbe5ju1n250" path="res://Scripts/Bridge/CanvasEditBridge.gd" id="5_trn2v"]
 
 [sub_resource type="StyleBoxFlat" id="sbf_header"]
 bg_color = Color(0.09, 0.09, 0.1, 1)
@@ -163,11 +165,13 @@ theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 12
 text = "File"
 
-[node name="M2" type="Label" parent="Root/TopBar/H/Menus" unique_id=2140041709]
+[node name="M2" type="MenuButton" parent="Root/TopBar/H/Menus" unique_id=813308922]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 12
 text = "Edit"
+script = ExtResource("3_lgr22")
+dock_manager_path = NodePath("../../../../Content/CenterRight/Center/Tabs/DockManager")
 
 [node name="M3" type="Label" parent="Root/TopBar/H/Menus" unique_id=102160303]
 layout_mode = 2
@@ -318,6 +322,7 @@ current_tab = 0
 
 [node name="Canvas" type="Control" parent="Root/Content/CenterRight/Center/Tabs" unique_id=607938965]
 layout_mode = 2
+script = ExtResource("5_trn2v")
 metadata/_tab_index = 0
 
 [node name="VPC" type="SubViewportContainer" parent="Root/Content/CenterRight/Center/Tabs/Canvas" unique_id=2035271046]

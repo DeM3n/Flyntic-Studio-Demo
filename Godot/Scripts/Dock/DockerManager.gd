@@ -432,3 +432,34 @@ func _deserialize_node(data) -> Control:
 		split.add_child(b)
 	split.split_offset = data.get("offset", 0)
 	return split
+# ---------------- ACTIVE PANEL TRACKING ----------------
+signal active_panel_changed(kind: String)
+
+var _active_leaf: DockLeaf = null
+
+func set_active_leaf(leaf: DockLeaf) -> void:
+	if not is_instance_valid(leaf):
+		return
+	_active_leaf = leaf
+	#print(">>> set_active_leaf called: ", leaf, " kind=", get_active_kind())
+	active_panel_changed.emit(get_active_kind())
+
+func get_active_leaf() -> DockLeaf:
+	if _active_leaf and not is_instance_valid(_active_leaf):
+		_active_leaf = null
+	return _active_leaf
+
+func get_active_panel() -> Node:
+	var leaf := get_active_leaf()
+	if leaf == null or leaf.panels.is_empty():
+		return null
+	var idx: int = leaf.tab_bar.current_tab
+	if idx < 0 or idx >= leaf.panels.size():
+		return null
+	return leaf.panels[idx]
+
+func get_active_kind() -> String:
+	var panel := get_active_panel()
+	if panel == null:
+		return ""
+	return panel.get_meta("dock_kind", "")

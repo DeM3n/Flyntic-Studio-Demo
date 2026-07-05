@@ -1499,6 +1499,57 @@ func serialize() -> Dictionary:
 		})
 	return {"components": comps, "connections": conns}
 
+# ─────────────────────── IMPORT MERGE (không clear) ───────────────
+func import_merge(data: Dictionary) -> void:
+	var local_uid_map := {}
+
+	for c in data.get("components", []):
+		var cdef = COMP_DEFS.get(c.name, {})
+		if cdef.is_empty():
+			continue
+		var old_uid = int(c.uid)
+		uid_counter += 1
+		var new_uid = uid_counter
+		local_uid_map[old_uid] = new_uid
+
+		canvas_components.append({
+			"uid":          new_uid,
+			"name":         c.name,
+			"pos":          Vector2(c.pos[0], c.pos[1]) + Vector2(40, 40),
+			"size":         cdef.size,
+			"color":        cdef.color,
+			"shape":        cdef.get("shape", "rect"),
+			"ports":        cdef.ports.duplicate(true),
+			"selected":     false,
+			"rotation_deg": c.get("rotation_deg", 0),
+		})
+
+	var comp_by_new_uid := {}
+	for c in canvas_components:
+		comp_by_new_uid[c.uid] = c
+
+	for conn in data.get("connections", []):
+		var new_from = local_uid_map.get(int(conn.from_uid), -1)
+		var new_to   = local_uid_map.get(int(conn.to_uid), -1)
+		var fc = comp_by_new_uid.get(new_from)
+		var tc = comp_by_new_uid.get(new_to)
+		if fc == null or tc == null:
+			continue
+		var fp = _find_port_by_name(fc, conn.from_port)
+		var tp = _find_port_by_name(tc, conn.to_port)
+		if fp.is_empty() or tp.is_empty():
+			continue
+		var bps: Array[Vector2] = []
+		for bp in conn.get("bend_points", []):
+			bps.append(Vector2(bp[0], bp[1]) + Vector2(40, 40))
+		connections.append({
+			"from_comp":   fc, "from_port": fp,
+			"to_comp":     tc, "to_port":   tp,
+			"valid":       conn.get("valid", true),
+			"bend_points": bps,
+		})
+
+	canvas.queue_redraw()
 func deserialize(data: Dictionary):
 	# Clear
 	canvas_components.clear()

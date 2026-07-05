@@ -17,6 +17,8 @@ var _preview_node: Control = null
 
 func _ready() -> void:
 	_ensure_refs()
+	gui_input.connect(_on_leaf_gui_input)
+
 
 func _ensure_refs() -> void:
 	if tab_bar == null:
@@ -35,6 +37,7 @@ func add_panel(panel: Control, title: String, kind: String = "") -> void:
 	stack.add_child(panel)
 	tab_bar.add_tab(title)
 	_show_tab(tab_bar.tab_count - 1)
+	_notify_active()
 
 func remove_tab(idx: int) -> void:
 	var panel := panels[idx]
@@ -54,6 +57,7 @@ func _show_tab(idx: int) -> void:
 
 func _on_tab_clicked(idx: int) -> void:
 	_show_tab(idx)
+	_notify_active()
 
 # ---------------- KÉO TAB ----------------
 func _on_tabbar_gui_input(event: InputEvent) -> void:
@@ -167,3 +171,9 @@ func _find_leaf_at(gpos: Vector2) -> DockLeaf:
 	if get_global_rect().has_point(gpos):
 		return self
 	return null
+func _notify_active() -> void:
+	if dock_manager and dock_manager.has_method("set_active_leaf"):
+		dock_manager.set_active_leaf(self)
+func _on_leaf_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		_notify_active()

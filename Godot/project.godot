@@ -25,6 +25,7 @@ window/stretch/mode="canvas_items"
 
 AuthManager="*uid://ktwumacpjx2v"
 ProjectState="*uid://bge52d1rmd1f0"
+UndoRedoManager="*uid://c06xldqviy3cg"
 
 [display]
 
