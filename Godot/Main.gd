@@ -120,7 +120,8 @@ var trash_panel: Panel = null
 
 # ──────────────────────────── INIT ────────────────────────────────
 func _ready():
-
+	if get_window() == get_tree().root:
+		get_tree().set_auto_accept_quit(false)
 	get_window().size = Vector2i(1600, 900)
 	get_window().move_to_center()
 	
@@ -1134,6 +1135,7 @@ func _place(id: String, pos: Vector3, port_name: String = "", parent_uid: int = 
 	placed.append(entry)
 	_rebuild_wires()
 	_update_all()
+	mark_dirty()
 	_log("Assembled: " + id, "success")
 
 func _is_in_drone(node: Node) -> bool:
@@ -2480,6 +2482,7 @@ func _remove_component(uid: int):
 	
 	_rebuild_wires()
 	_update_all()
+	mark_dirty() #
 
 func _re_place_ghost_children(parent_uid_hint: int):
 	if _ghost_children.is_empty():
@@ -2679,6 +2682,7 @@ func _write_project(path: String):
 	file.close()
 	_log("Saved: " + path.get_file(), "success")
 	_register_project(path)
+	_mark_clean() 
 
 func _register_project(path: String) -> void:
 	var index_path := "user://projects_index.json"
@@ -2722,6 +2726,7 @@ func _read_project(path: String):
 	_update_all()
 	_log("Opened: " + path.get_file(), "success")
 	_register_project(path)
+	_mark_clean() 
 # ─────────────────────────── IMPORT ───────────────────────────
 func _on_import():
 	var dialog = FileDialog.new()
@@ -2877,6 +2882,14 @@ func _deserialize_blocks(data: Dictionary):
 				if bdef.type == b.type:
 					col = bdef.color
 		_create_block(b.type, b.label, col, Vector2(b.pos[0], b.pos[1]))
+# ─────────────────────── UNSAVED CHANGES TRACKING ──────────────────
+var _is_dirty: bool = false
+
+func mark_dirty() -> void:
+	_is_dirty = true
+
+func _mark_clean() -> void:
+	_is_dirty = false
 
 # ── Clear all ──────────────────────────────────────────────────────
 func _clear_all():
@@ -2950,12 +2963,6 @@ func _fix_responsive_layout() -> void:
 	var right_width = clamp(vp_width * 0.18, 180, 260)
 	$Root/Content/CenterRight.split_offset = -int(right_width)
 	# 3. Search box: đảm bảo không bị clip
-
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_SIZE_CHANGED:
-		_fix_responsive_layout()
-
 # ─────────────────────── EDIT MENU SUPPORT (Canvas) ───────────────
 var _clipboard: Dictionary = {}
 
@@ -3041,3 +3048,229 @@ func _restore_deleted_component(comp_snapshot: Dictionary, children_snapshot: Ar
 
 func canvas_select_all() -> void:
 	_log("Select All: Canvas dùng single-select Tree, chưa hỗ trợ đa chọn", "warn")
+# ─────────────────────── UNSAVED CHANGES DIALOG ────────────────────
+#func _show_unsaved_dialog(on_proceed: Callable) -> void:
+	#get_window().grab_focus()
+	#print(">>> _show_unsaved_dialog bắt đầu")
+	#var dialog := ConfirmationDialog.new()
+	#dialog.title = "Unsaved Changes"
+	#dialog.dialog_text = "Bạn có thay đổi chưa lưu. Bạn có muốn lưu trước khi tiếp tục không?"
+	#dialog.ok_button_text = "Save"
+	#dialog.cancel_button_text = "Cancel"
+	#dialog.add_button("Don't Save", true, "discard")
+	#add_child(dialog)
+	#await get_tree().process_frame
+	#print(">>> dialog đã add_child, gọi popup_centered")
+	#dialog.popup_centered()
+	#print(">>> popup_centered xong, visible=", dialog.visible)
+#
+	#dialog.confirmed.connect(func():
+		#print(">>> confirmed pressed")
+		#if _current_path != "":
+			#_write_project(_current_path)
+			#dialog.queue_free()
+			#on_proceed.call()
+		#else:
+			#dialog.queue_free()
+			#_on_save_as_then(on_proceed)
+	#)
+	#dialog.custom_action.connect(func(action):
+		#print(">>> custom_action: ", action)
+		#if action == "discard":
+			#dialog.queue_free()
+			#on_proceed.call()
+	#)
+	#dialog.canceled.connect(func():
+		#print(">>> canceled")
+		#dialog.queue_free()
+	#)
+# ─────────────────────── UNSAVED CHANGES DIALOG (custom UI) ────────
+const _DLG_BG            := Color(0.145, 0.157, 0.184)
+const _DLG_BORDER        := Color(0.95, 0.65, 0.25)   # viền cam cảnh báo, nổi bật trên nền xám
+const _DLG_TEXT          := Color(0.92, 0.92, 0.94)
+const _DLG_TEXT_DIM      := Color(0.70, 0.70, 0.74)
+const _BTN_PRIMARY_BG    := Color(0.25, 0.55, 0.95)
+const _BTN_DANGER_BG     := Color(0.20, 0.21, 0.24)
+const _BTN_DANGER_BORDER := Color(0.85, 0.35, 0.35)
+const _BTN_GHOST_BG      := Color(0.20, 0.21, 0.24)
+
+func _show_unsaved_dialog(on_proceed: Callable) -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 100
+	add_child(layer)
+
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.55)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(overlay)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(440, 0)
+	panel.modulate.a = 0.0
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = _DLG_BG
+	panel_style.border_color = _DLG_BORDER
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(10)
+	panel_style.shadow_size = 20
+	panel_style.shadow_color = Color(0, 0, 0, 0.45)
+	panel_style.content_margin_left = 24
+	panel_style.content_margin_right = 24
+	panel_style.content_margin_top = 20
+	panel_style.content_margin_bottom = 16
+	panel.add_theme_stylebox_override("panel", panel_style)
+	center.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 14)
+	panel.add_child(vbox)
+
+	# ---- Header: icon + title ----
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 10)
+	vbox.add_child(header)
+
+	var icon_lbl := Label.new()
+	icon_lbl.text = "⚠"
+	icon_lbl.add_theme_font_size_override("font_size", 22)
+	icon_lbl.add_theme_color_override("font_color", _DLG_BORDER)
+	header.add_child(icon_lbl)
+
+	var title_lbl := Label.new()
+	title_lbl.text = "Unsaved Changes"
+	title_lbl.add_theme_font_size_override("font_size", 16)
+	title_lbl.add_theme_color_override("font_color", _DLG_TEXT)
+	title_lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	header.add_child(title_lbl)
+
+	# ---- Message ----
+	var msg_lbl := Label.new()
+	msg_lbl.text = "Bạn có thay đổi chưa lưu. Bạn có muốn lưu trước khi tiếp tục không?"
+	msg_lbl.add_theme_font_size_override("font_size", 13)
+	msg_lbl.add_theme_color_override("font_color", _DLG_TEXT_DIM)
+	msg_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	msg_lbl.custom_minimum_size = Vector2(392, 0)
+	vbox.add_child(msg_lbl)
+
+	var sep := HSeparator.new()
+	sep.add_theme_color_override("color", Color(1, 1, 1, 0.08))
+	vbox.add_child(sep)
+
+	# ---- Button row ----
+	var btn_row := HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 10)
+	btn_row.alignment = BoxContainer.ALIGNMENT_END
+	vbox.add_child(btn_row)
+
+	var btn_cancel  := _make_dialog_button("Cancel", "ghost")
+	var btn_discard := _make_dialog_button("Don't Save", "danger")
+	var btn_save    := _make_dialog_button("Save", "primary")
+	btn_row.add_child(btn_cancel)
+	btn_row.add_child(btn_discard)
+	btn_row.add_child(btn_save)
+
+	var _close := func(): layer.queue_free()
+
+	btn_cancel.pressed.connect(func():
+		_close.call()
+	)
+	btn_discard.pressed.connect(func():
+		_close.call()
+		on_proceed.call()
+	)
+	btn_save.pressed.connect(func():
+		_close.call()
+		if _current_path != "":
+			_write_project(_current_path)
+			on_proceed.call()
+		else:
+			_on_save_as_then(on_proceed)
+	)
+
+	var tw := create_tween()
+	tw.tween_property(panel, "modulate:a", 1.0, 0.12)
+	btn_save.grab_focus()
+
+func _make_dialog_button(text: String, kind: String) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.custom_minimum_size = Vector2(96, 34)
+	btn.add_theme_font_size_override("font_size", 13)
+
+	var normal := StyleBoxFlat.new()
+	var hover := StyleBoxFlat.new()
+	var pressed := StyleBoxFlat.new()
+	for sb in [normal, hover, pressed]:
+		sb.set_corner_radius_all(6)
+		sb.content_margin_left = 12
+		sb.content_margin_right = 12
+
+	match kind:
+		"primary":
+			normal.bg_color = _BTN_PRIMARY_BG
+			hover.bg_color = _BTN_PRIMARY_BG.lightened(0.08)
+			pressed.bg_color = _BTN_PRIMARY_BG.darkened(0.1)
+			btn.add_theme_color_override("font_color", Color(1, 1, 1))
+		"danger":
+			normal.bg_color = _BTN_DANGER_BG
+			normal.border_color = _BTN_DANGER_BORDER
+			normal.set_border_width_all(1)
+			hover.bg_color = _BTN_DANGER_BG.lightened(0.06)
+			hover.border_color = _BTN_DANGER_BORDER
+			hover.set_border_width_all(1)
+			pressed.bg_color = _BTN_DANGER_BG.darkened(0.05)
+			pressed.border_color = _BTN_DANGER_BORDER
+			pressed.set_border_width_all(1)
+			btn.add_theme_color_override("font_color", _BTN_DANGER_BORDER)
+		"ghost":
+			normal.bg_color = _BTN_GHOST_BG
+			hover.bg_color = _BTN_GHOST_BG.lightened(0.08)
+			pressed.bg_color = _BTN_GHOST_BG.darkened(0.03)
+			btn.add_theme_color_override("font_color", _DLG_TEXT_DIM)
+
+	btn.add_theme_stylebox_override("normal", normal)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", pressed)
+
+	var focus := normal.duplicate()
+	focus.border_color = _DLG_BORDER
+	focus.set_border_width_all(2)
+	btn.add_theme_stylebox_override("focus", focus)
+
+	return btn
+func _on_save_as_then(callback: Callable) -> void:
+	var dialog = FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	dialog.filters   = ["*.flyntic ; Flyntic Project"]
+	dialog.access    = FileDialog.ACCESS_FILESYSTEM
+	dialog.min_size  = Vector2i(640, 420)
+	add_child(dialog)
+	await get_tree().process_frame
+	dialog.popup_centered()
+	
+	dialog.file_selected.connect(func(path: String):
+		_write_project(path)
+		dialog.queue_free()
+		callback.call()
+	)
+	dialog.canceled.connect(func(): dialog.queue_free())
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and get_window() == get_tree().root:
+		_handle_quit_request()
+
+func _handle_quit_request() -> void:
+	request_close(func():
+		get_tree().quit()
+	)
+
+func request_close(on_confirmed_close: Callable) -> void:
+	if not _is_dirty:
+		on_confirmed_close.call()
+		return
+	_show_unsaved_dialog(on_confirmed_close)

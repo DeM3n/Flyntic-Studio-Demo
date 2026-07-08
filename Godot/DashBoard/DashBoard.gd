@@ -15,6 +15,7 @@ var loc_label: Label
 var _nav_buttons: Dictionary = {}   # id -> Button
 var _pages: Dictionary = {}         # id -> Control
 var pages_container: Control
+var _open_windows: Array = []
 static var _bold_font_cache: FontVariation
 # ── Colors ──────────────────────────────────────────────────────
 const C_BG_DARK    := Color(0.13, 0.13, 0.13)
@@ -31,6 +32,7 @@ const C_ROW_HOVER  := Color(0.20, 0.20, 0.23)
 
 func _ready() -> void:
 	print("=== DASHBOARD READY ===")
+	get_tree().set_auto_accept_quit(false)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	_scan_projects()
@@ -679,10 +681,21 @@ func _spawn_editor_window(title: String) -> void:
 	win.mode = Window.MODE_MAXIMIZED
 	win.popup_centered()
 	ProjectState.open_window_count += 1
+	_open_windows.append({"window": win, "main_scene": main_scene})
 	win.close_requested.connect(func():
+		_try_close_editor_window(win, main_scene)
+	)
+func _try_close_editor_window(win: Window, main_scene: Node) -> void:
+	if main_scene.has_method("request_close"):
+		main_scene.request_close(func():
+			_remove_open_window(win)
+			ProjectState.open_window_count -= 1
+			win.queue_free()
+		)
+	else:
+		_remove_open_window(win)
 		ProjectState.open_window_count -= 1
 		win.queue_free()
-	)
 
 func _open_project(path: String) -> void:
 	if ProjectState.open_window_count >= 1:
@@ -1070,3 +1083,25 @@ func _build_projects_page() -> Control:
 	empty_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	return vbox
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_confirm_close_all_windows(0)
+
+func _confirm_close_all_windows(index: int) -> void:
+	if index >= _open_windows.size():
+		get_tree().quit()
+		return
+	var entry = _open_windows[index]
+	if not is_instance_valid(entry.window) or not is_instance_valid(entry.main_scene):
+		_confirm_close_all_windows(index + 1)
+		return
+	entry.main_scene.request_close(func():
+		entry.window.queue_free()
+		_confirm_close_all_windows(index + 1)
+	)
+
+func _remove_open_window(win: Window) -> void:
+	for i in range(_open_windows.size()):
+		if _open_windows[i].window == win:
+			_open_windows.remove_at(i)
+			return
