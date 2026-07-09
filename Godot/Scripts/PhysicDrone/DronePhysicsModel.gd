@@ -68,11 +68,17 @@ static func compute_mass_properties(placed: Array, components: Dictionary, drone
 			var thrust_g: float = def.get("thrust", 0.0)
 			# Quy ước CW/CCW chuẩn cấu hình X: 2 góc chéo nhau quay cùng chiều.
 			# (Tạm suy ra từ vị trí vì data hiện chưa có field spin_dir riêng.)
+			var prop_def := _find_attached_propeller_def(comp, placed, components)
+			var thrust_mult: float = prop_def.get("thrust_mult", 1.0)
+			var prop_kv_range: Vector2 = prop_def.get("kv_range", Vector2(-1, -1))
 			var spin_dir := 1 if (sign(r.x) * sign(r.z)) >= 0.0 else -1
 			motors.append({
 				"pos": r,
-				"max_thrust_n": thrust_g * GRAMF_TO_NEWTON,
+				"max_thrust_n": thrust_g * thrust_mult * GRAMF_TO_NEWTON,
 				"spin_dir": spin_dir,
+				"kv": def.get("kv", 1500.0),
+				"prop_kv_range": prop_kv_range,
+				"max_current": def.get("max_current", 20.0),
 			})
 
 	# Tránh chia 0 khi quay (vd: mới có Frame, chưa gắn Motor nào)
@@ -128,22 +134,32 @@ static func _kv_prop_match_factor(motor_kv: float, prop_range: Vector2) -> float
 	var dist: float = prop_range.x - motor_kv if motor_kv < prop_range.x else motor_kv - prop_range.y
 	var span: float = max(prop_range.y - prop_range.x, 1.0)
 	var penalty: float = clamp(dist / span, 0.0, 1.0)
-	return clamp(1.0 - penalty * 0.5, 0.5, 1.0)  # tệ nhất giảm còn 50%, không triệt tiêu hoàn toàn
+	return clamp(1.0 - penalty * 0.6, 0.4, 1.0)
 
 ## Trung bình hệ số khớp trên toàn bộ cánh quạt đang gắn
-static func get_kv_mismatch_factor(placed: Array, components: Dictionary, avg_kv: float) -> float:
-	var factors: Array = []
-	for comp in placed:
-		var def: Dictionary = components.get(comp.get("id", ""), {})
-		if def.get("type", "") == "Propeller" and def.has("kv_range"):
-			factors.append(_kv_prop_match_factor(avg_kv, def["kv_range"]))
-	if factors.is_empty():
+## Trung bình KV thô của các motor đang gắn -- CHỈ dùng cho kv_factor (responsiveness).
+## KHÔNG dùng để tính mismatch penalty -- mismatch phải theo từng cặp, xem hàm dưới.
+static func average_motor_kv(motors: Array) -> float:
+	if motors.is_empty():
+		return 1500.0
+	var total := 0.0
+	for m in motors:
+		total += m.get("kv", 1500.0)
+	return total / motors.size()
+
+## Hệ số khớp KV-cánh quạt THEO TỪNG CẶP motor-propeller thực tế, lấy factor TỆ NHẤT
+## trong toàn hệ thống -- 1 cặp lắp sai nặng không còn bị pha loãng bởi các cặp đúng khác.
+## motors: lấy từ compute_mass_properties() (đã có sẵn prop_kv_range cho từng motor).
+static func get_kv_mismatch_factor(motors: Array) -> float:
+	if motors.is_empty():
 		return 1.0
-	var total: float = 0.0
-	for f in factors:
-		total += f
-	return total / factors.size()
-## Trả về hệ số quá tải ESC: 1.0 = an toàn, < 1.0 = quá tải (phạt hiệu suất/nhiệt)
+	var worst := 1.0
+	for m in motors:
+		var prop_range: Vector2 = m.get("prop_kv_range", Vector2(-1, -1))
+		if prop_range.x < 0.0:
+			continue  # motor không gắn prop -- case này đã bị preflight check khác chặn
+		worst = min(worst, _kv_prop_match_factor(m.get("kv", 1500.0), prop_range))
+	return worst
 static func get_esc_overload_factor(placed: Array, components: Dictionary) -> float:
 	var esc_rating := 0.0
 	var max_motor_current := 0.0
@@ -157,6 +173,15 @@ static func get_esc_overload_factor(placed: Array, components: Dictionary) -> fl
 		return 1.0
 	if max_motor_current <= esc_rating:
 		return 1.0
-	# Vượt dòng → phạt tuyến tính, tệ nhất còn 40%
 	var overshoot: float = (max_motor_current - esc_rating) / esc_rating
-	return clamp(1.0 - overshoot * 0.6, 0.4, 1.0)
+	return clamp(1.0 - overshoot * 0.7, 0.3, 1.0)
+
+
+## Tìm propeller (nếu có) đang gắn trực tiếp vào 1 component (thường là Motor).
+## Trả về def của propeller đó từ COMPONENTS (rỗng nếu không có prop nào gắn).
+static func _find_attached_propeller_def(comp: Dictionary, placed: Array, components: Dictionary) -> Dictionary:
+	var comp_uid = comp.get("uid")
+	for item in placed:
+		if item.get("parent_id") == comp_uid and item.get("type", "") == "Propeller":
+			return components.get(item.get("id", ""), {})
+	return {}

@@ -267,7 +267,7 @@ static func make_section_header(
 #  GRID OVERLAY PANEL  (HUD scanline header bg)
 # ─────────────────────────────────────────────
 ## Returns a Panel styled with a subtle dot-grid — use as background for hero headers.
-static func make_grid_panel(h: int = 28, v: int = 28) -> Panel:
+static func make_grid_panel(_h: int = 28, _v: int = 28) -> Panel:
 	var panel := Panel.new()
 	var s := StyleBoxFlat.new()
 	s.bg_color = C_BG_DARK

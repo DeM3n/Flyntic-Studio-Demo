@@ -96,7 +96,7 @@ var BLOCK_CATEGORIES := {
 
 var _active_block_cat := "BtnE"
 
-var _block_cat_collapsed  := {}  # { "Events": false, "Flight": true, ... }
+#var _block_cat_collapsed  := {}  # { "Events": false, "Flight": true, ... }
 
 
 # Runtime state
@@ -116,6 +116,7 @@ var sim_step_idx := 0
 var sim_step_timer := 0.0
 var sim_target_pos := Vector3.ZERO
 var sim_target_rot := Vector3.ZERO
+var sim_current_speed_mult := 1.0
 var trash_panel: Panel = null
 
 # ──────────────────────────── INIT ────────────────────────────────
@@ -126,22 +127,6 @@ func _ready():
 	get_window().move_to_center()
 	
 	await get_tree().process_frame
-
-	$Root.rotation = 0.0
-	$Root/TopBar.size_flags_horizontal = Control.SIZE_FILL
-	$Root/StatusBar.size_flags_horizontal = Control.SIZE_FILL
-	print($Root/Content/CenterRight/Center.get_children())
-	_setup_hud()
-	_build_comp_list()
-	_build_floor()
-	_build_grid()
-	_place("PVC Pipe Frame", Vector3.ZERO)
-	_focus_camera_on_drone()
-	_update_all()
-	play_btn.pressed.connect(_on_play)
-	pause_btn.pressed.connect(_on_pause)
-	stop_btn.pressed.connect(_on_stop)
-	comp_list.item_selected.connect(_on_item_selected)
 	# ==================== HIERARCHY SETUP ====================
 	
 	hier_tree.item_selected.connect(_on_hier_item_selected)
@@ -157,8 +142,23 @@ func _ready():
 	hier_tree.enable_recursive_folding = true
 	hier_tree.connect("gui_input", _on_hier_tree_gui_input)      # ← thêm
 	hier_tree.connect("mouse_exited", _on_hier_mouse_exited)    
-	
-	_build_hierarchy_tree()
+	$Root.rotation = 0.0
+	$Root/TopBar.size_flags_horizontal = Control.SIZE_FILL
+	$Root/StatusBar.size_flags_horizontal = Control.SIZE_FILL
+	print($Root/Content/CenterRight/Center.get_children())
+	_setup_hud()
+	_build_comp_list()
+	_build_floor()
+	_build_grid()
+	_place("PVC Pipe Frame", Vector3.ZERO)
+	_focus_camera_on_drone()
+	_update_all()
+	play_btn.pressed.connect(_on_play)
+	pause_btn.pressed.connect(_on_pause)
+	stop_btn.pressed.connect(_on_stop)
+	comp_list.item_selected.connect(_on_item_selected)
+
+
 	
 	_setup_blocks()
 	_create_trash_zone()
@@ -1201,7 +1201,7 @@ func _add_wire(from: Vector3, to: Vector3):
 		wire_root.add_child(cyl)
 		cyl.look_at_from_position((p0 + p1) / 2.0, p1, Vector3.UP)
 		cyl.rotate_object_local(Vector3.RIGHT, PI / 2)
-	wires_group.add_child(wire_root)
+	#wires_group.add_child(wire_root)
 
 func _bezier3(a: Vector3, b: Vector3, c: Vector3, t: float) -> Vector3:
 	var ab = a.lerp(b, t)
@@ -1209,36 +1209,7 @@ func _bezier3(a: Vector3, b: Vector3, c: Vector3, t: float) -> Vector3:
 	return ab.lerp(bc, t)
 
 ## ──────────────────────────── BUILD MESH ──────────────────────────
-#
-#func _build_mesh(id: String, is_ghost: bool) -> Node3D:
-	#var cdata = ComponentFactory.COMPONENTS[id]  # đổi COMPONENTS -> ComponentFactory.COMPONENTS
-	#var root = Node3D.new()
-#
-	#if cdata.get("use_obj", false):
-		#_build_frame_from_obj(root, cdata)
-	#elif cdata.type == "Frame":
-		#_build_frame_procedural(root)  # Frame giữ nguyên logic riêng trong main.gd
-	#else:
-		#ComponentFactory.build(root, id)  # Motor/Propeller/Battery/FC/ESC đều qua đây
-#
-	#var mat = StandardMaterial3D.new()
-	#if is_ghost:
-		#mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-		#mat.albedo_color = Color(0, 1, 0.8, 0.3)
-	#else:
-		#var raw_c = cdata.color
-		#mat.albedo_color = Color(min(raw_c.r * 1.3, 1.0), min(raw_c.g * 1.3, 1.0), min(raw_c.b * 1.3, 1.0))
-		#mat.metallic = 0.0
-		#mat.roughness = 0.5
-		#mat.specular = 0.3
-	#_apply_material_recursive(root, mat)
-	#return root
-#func _apply_material_recursive(node: Node, mat: Material):
-	#for ch in node.get_children():
-		#if ch is MeshInstance3D:
-			#ch.material_override = mat
-		#if ch.get_child_count() > 0:
-			#_apply_material_recursive(ch, mat)
+
 func _build_mesh(id: String, is_ghost: bool) -> Node3D:
 	var cdata = ComponentFactory.COMPONENTS[id]
 	var root = Node3D.new()
@@ -1545,12 +1516,50 @@ func _on_stop():
 	for btn in toolbox_v.get_children():
 		if btn is Button: btn.disabled = false
 
+#func _simulate(delta: float):
+	#sim_time += delta
+	#var check = _preflight_check()
+	## 1. Propeller Spin — use bridge RPMs if available
+	##print("capability: ", check.capability, " | use_native_physics: ", use_native_physics, " | bridge_active: ", _bridge_active())
+	#
+	#if sim_state == "playing":
+		#var bridge_rpms = []
+		#if _bridge_active():
+			#bridge_rpms = bridge.get_motor_rpms()
+		#var prop_idx := 0
+		#for comp in placed:
+			#if is_instance_valid(comp.get("node")) and comp.type == "Propeller":
+				#for ch in comp.node.get_children():
+					#if is_instance_valid(ch) and ch.name == "prop_blade":
+						#var spin_speed := 35.0
+						#if prop_idx < bridge_rpms.size() and bridge_rpms[prop_idx] > 0:
+							#spin_speed = bridge_rpms[prop_idx] / 150.0  # Increased multiplier for realism
+						#ch.rotation.y += delta * spin_speed
+						#prop_idx += 1
+#
+	#if check.capability == "Cannot fly" and not _bridge_active():
+		#components_group.position.y = lerp(components_group.position.y, 0.0, 0.08)
+		#return
+	#
+	## ── BRIDGE PHYSICS MODE ──
+	#if _bridge_active() and use_bridge_physics:
+		#_simulate_bridge(delta)
+		#return
+#
+	## ── KINEMATIC FALLBACK MODE ──
+	#_simulate_kinematic(delta, check)
+## không chỉ node đầu tiên. An toàn cho cả model 1-mesh lẫn model nhiều-mesh.
+func _collect_group_nodes(node: Node, group_name: String, results: Array) -> void:
+	if node.is_in_group(group_name):
+		results.append(node)
+	for child in node.get_children():
+		_collect_group_nodes(child, group_name, results)
+
+
 func _simulate(delta: float):
 	sim_time += delta
 	var check = _preflight_check()
-	# 1. Propeller Spin — use bridge RPMs if available
-	#print("capability: ", check.capability, " | use_native_physics: ", use_native_physics, " | bridge_active: ", _bridge_active())
-	
+
 	if sim_state == "playing":
 		var bridge_rpms = []
 		if _bridge_active():
@@ -1558,26 +1567,26 @@ func _simulate(delta: float):
 		var prop_idx := 0
 		for comp in placed:
 			if is_instance_valid(comp.get("node")) and comp.type == "Propeller":
-				for ch in comp.node.get_children():
-					if is_instance_valid(ch) and ch.name == "prop_blade":
-						var spin_speed := 35.0
-						if prop_idx < bridge_rpms.size() and bridge_rpms[prop_idx] > 0:
-							spin_speed = bridge_rpms[prop_idx] / 150.0  # Increased multiplier for realism
-						ch.rotation.y += delta * spin_speed
-						prop_idx += 1
+				var blades: Array = []
+				_collect_group_nodes(comp.node, "prop_blade", blades)
+
+				if not blades.is_empty():
+					var spin_speed := 35.0
+					if prop_idx < bridge_rpms.size() and bridge_rpms[prop_idx] > 0:
+						spin_speed = bridge_rpms[prop_idx] / 150.0
+					for blade in blades:
+						blade.rotation.y += delta * spin_speed
+
+				prop_idx += 1  # tăng theo SỐ PROPELLER, không theo số blade tìm được
 
 	if check.capability == "Cannot fly" and not _bridge_active():
 		components_group.position.y = lerp(components_group.position.y, 0.0, 0.08)
 		return
-	
-	# ── BRIDGE PHYSICS MODE ──
+
 	if _bridge_active() and use_bridge_physics:
 		_simulate_bridge(delta)
 		return
-
-	# ── KINEMATIC FALLBACK MODE ──
 	_simulate_kinematic(delta, check)
-
 func _bridge_active() -> bool:
 	"""Check if bridge is available and connected."""
 	return bridge != null and bridge_connected and is_instance_valid(bridge)
@@ -1642,92 +1651,36 @@ func _on_bridge_state(state: Dictionary):
 	if sim_state == "playing":
 		sim_label.text = status_text.capitalize()
 
+
 func _get_flight_params() -> Dictionary:
 	if drone_root == null or placed.is_empty():
 		return {"speed": 1.0, "climb": 0.05, "responsiveness": 0.1}
-	
+
 	var props = DronePhysicsModel.compute_mass_properties(placed, ComponentFactory.COMPONENTS, drone_root)
 	var twr = DronePhysicsModel.thrust_to_weight_ratio(props.motors, props.total_mass_kg)
-	
+
 	# TWR 2.0 = mức chuẩn (baseline), drone vừa đủ bay ổn
 	# TWR 4.0+ = motor rất khỏe, bay nhanh
 	# TWR < 2.0 = cận giới hạn bay, rất chậm
 	var speed_factor := clampf(twr / 2.0, 0.3, 3.0)
-	var total_kv := 0.0
-	var motor_count := 0
-	for comp in placed:
-		var def: Dictionary = ComponentFactory.COMPONENTS.get(comp.get("id", ""), {})
-		if def.get("type", "") == "Motor":
-			total_kv += def.get("kv", 1500.0)   # 1500 = fallback nếu chưa có field kv
-			motor_count += 1
-	var avg_kv: float = total_kv / max(motor_count, 1)   # <-- dòng bị thiếu, đã thêm lại
 
 	var voltage := DronePhysicsModel.get_battery_voltage(placed, ComponentFactory.COMPONENTS)
-	var mismatch_factor := DronePhysicsModel.get_kv_mismatch_factor(placed, ComponentFactory.COMPONENTS, avg_kv)
-	# kv_factor giờ tính theo RPM tham chiếu thật (KV × V), không chỉ KV thô
+	var avg_kv := DronePhysicsModel.average_motor_kv(props.motors)
+	# mismatch_factor giờ tính theo TỪNG CẶP motor-propeller thật (worst-case),
+	# không còn pha loãng qua trung bình toàn hệ thống
+	var mismatch_factor := DronePhysicsModel.get_kv_mismatch_factor(props.motors)
+	# kv_factor theo RPM tham chiếu thật (KV × V), không chỉ KV thô
 	var rpm_ref := 1500.0 * 14.8  # baseline: 1500KV @ 4S
 	var kv_factor: float = clamp((avg_kv * voltage) / rpm_ref, 0.4, 2.0)
 	var esc_factor := DronePhysicsModel.get_esc_overload_factor(placed, ComponentFactory.COMPONENTS)
+
 	return {
 		"speed": speed_factor * mismatch_factor * esc_factor,
 		"climb": 0.03 * speed_factor * mismatch_factor * esc_factor,
 		"responsiveness": clamp(0.05 * kv_factor, 0.02, 0.15),
+		"accel_response": clamp(0.08 * kv_factor, 0.03, 0.25),
 	}
-	
 
-#func _simulate_kinematic(delta: float, check: Dictionary):
-	#if drone_root == null: return
-	#
-	#var fp = _get_flight_params()   # lấy tham số từ component thật
-	#
-	#if sim_state == "playing" and sim_step_idx < sim_sequence.size():
-		#var step = sim_sequence[sim_step_idx]
-		#sim_step_timer += delta
-		#
-		#match step.type:
-			#"take_off":
-				#sim_target_pos.y = 2.5
-			#"forward":
-				#if sim_step_timer <= delta:
-					#_log("▶ Forward bắt đầu | dist: %.0f cm | duration: %.1f s | speed_factor: %.2f" % [step.value, step.duration, fp.speed], "info")
-#
-				#var target_dist = step.value * 0.05
-				#var forward_dir = -drone_root.global_transform.basis.z
-				#forward_dir.y = 0
-				#forward_dir = forward_dir.normalized()
-				## fp.speed nhân vào đây → motor khỏe hơn đi xa hơn trong cùng thời gian
-				#sim_target_pos += forward_dir * target_dist * (delta / step.duration) * fp.speed
-				#if sim_target_pos.y < 2.0: sim_target_pos.y = 2.5
-			#"hover":
-				#pass
-			#"land":
-				#sim_target_pos.y = 0.0
-		#
-		#if sim_step_timer >= step.duration:
-			#sim_step_idx += 1
-			#sim_step_timer = 0.0
-			#if sim_step_idx < sim_sequence.size():
-				#_log("Step " + str(sim_step_idx + 1) + ": Executing " + sim_sequence[sim_step_idx].type, "info")
-			#else:
-				#_log("Program finished", "success")
-				#sim_label.text = "Finished"
-#
-	#var final_target = sim_target_pos
-	#if check.capability == "Cannot fly":
-		#final_target.y = 0.0
-#
-	## fp.climb thay cho 0.05 cứng → TWR cao = lerp nhanh hơn = leo nhanh hơn
-	#drone_root.position = drone_root.position.lerp(final_target, fp.climb)
-	#
-	#var displacement = (sim_target_pos - drone_root.position)
-	#var dynamic_pitch = clamp(displacement.z * 0.3, -0.3, 0.3)
-	#var dynamic_roll  = clamp(-displacement.x * 0.3, -0.3, 0.3)
-	#
-	#var tilt_x = check.tilt_x * 0.2 + dynamic_pitch + sin(sim_time * 1.5) * 0.01
-	#var tilt_z = check.tilt_z * 0.2 + dynamic_roll  + cos(sim_time * 1.5) * 0.01
-	#
-	#drone_root.rotation.x = lerp(drone_root.rotation.x, tilt_x, fp.responsiveness)
-	#drone_root.rotation.z = lerp(drone_root.rotation.z, tilt_z, fp.responsiveness)
 func _simulate_kinematic(delta: float, check: Dictionary):
 	if drone_root == null: return
 	
@@ -1747,10 +1700,11 @@ func _simulate_kinematic(delta: float, check: Dictionary):
 				var target_dist = step.value * 0.05  # cm -> Godot units, CỐ ĐỊNH
 				if sim_step_timer <= delta:
 					sim_step_distance_traveled = 0.0
+					sim_current_speed_mult = 0.0
 					_log("▶ Forward bắt đầu | dist: %.0f cm | speed_factor: %.2f" % [step.value, fp.speed], "info")
-				
+				sim_current_speed_mult = lerp(sim_current_speed_mult, 1.0, fp.accel_response)
 				var base_speed := 1.0  # units/s ở speed_factor = 1.0 — tune lại theo cảm giác bay
-				var move_step: float = base_speed * fp.speed * delta
+				var move_step: float = base_speed * fp.speed * sim_current_speed_mult * delta
 				move_step = min(move_step, target_dist - sim_step_distance_traveled)
 				
 				var forward_dir = -drone_root.global_transform.basis.z
@@ -1767,8 +1721,23 @@ func _simulate_kinematic(delta: float, check: Dictionary):
 			"hover":
 				step_finished = sim_step_timer >= step.duration
 			"land":
-				sim_target_pos.y = 0.0
-				step_finished = sim_step_timer >= step.duration
+				if sim_step_timer <= delta:
+					sim_current_speed_mult = 0.0
+					_log("▶ Landing bắt đầu | speed_factor: %.2f" % fp.speed, "info")
+				sim_current_speed_mult = lerp(sim_current_speed_mult, 1.0, fp.accel_response)
+
+				var descent_speed: float = 1.5 * float(fp.speed) * sim_current_speed_mult
+				sim_target_pos.y = max(0.0, sim_target_pos.y - descent_speed * delta)
+
+				var reached_ground: bool = sim_target_pos.y <= 0.001
+				var timed_out: bool = sim_step_timer >= float(step.duration)
+				step_finished = reached_ground or timed_out
+				if timed_out and not reached_ground:
+					sim_target_pos.y = 0.0
+				if step_finished:
+					_log("✔ Landing xong | %.2f s" % sim_step_timer, "success")
+				#sim_target_pos.y = 0.0
+				#step_finished = sim_step_timer >= step.duration
 		
 		if step_finished:
 			sim_step_idx += 1
@@ -1853,42 +1822,7 @@ func _preflight_check() -> Dictionary:
 	return {"capability": cap, "reason": "", "tilt_x": tilt_x, "tilt_z": tilt_z}
 
 # ──────────────────────────── UPDATE UI ───────────────────────────
-#func _update_all():
-	#var tw := 0.0
-	#var tt := 0.0
-	#var bat_cap := 0
-	#for c in placed:
-		#if not _is_in_drone(c.node):
-			#continue
-		#var d = COMPONENTS[c.id]
-		#tw += d.weight
-		#tt += d.thrust
-		#bat_cap += d.get("capacity", 0)
-#
-	#weight_val.text = "%.1f g" % tw
-	#thrust_val.text = "%.2f kg" % (tt / 1000.0)
-	#var ratio = (tt / tw) if tw > 0 else 0.0
-	#twr_val.text = "%.2f:1" % ratio
-	## Capability badge
-	#if ratio >= 2.0:
-		#cap_val.text = "Good"
-		#cap_val.add_theme_color_override("font_color", Color(0.3, 0.9, 0.4))
-	#elif ratio >= 1.5:
-		#cap_val.text = "Marginal"
-		#cap_val.add_theme_color_override("font_color", Color(0.9, 0.8, 0.2))
-	#else:
-		#cap_val.text = "N/A"
-		#cap_val.remove_theme_color_override("font_color")
-#
-	#bat_val.text = str(bat_cap) + " mAh"
-	#var draw_a = tt * 0.001 * 30 # rough amps estimate
-	#var ft_min = (bat_cap / 1000.0 * 60.0 / max(draw_a, 1)) if bat_cap > 0 else 0
-	#ft_val.text = "%.1f min" % ft_min
-	#comp_count.text = "  Components: " + str(placed.size())
-	## Diagnostics
-	#_update_diagnostics()
-	## Hierarchy
-	#_build_hierarchy_tree()
+
 	
 func _calculate_stats() -> Dictionary:
 	var tw := 0.0
@@ -2032,6 +1966,8 @@ func _update_diagnostics():
 	var prop_count := 0
 	var motor_types  : Array = []
 	for c in placed:
+		if not _is_in_drone(c.node):  
+			continue
 		var c_type = c["type"]
 		if c_type == "Battery": has_bat = true
 		elif c_type == "Frame": has_frame = true
@@ -2112,6 +2048,7 @@ var tree_items: Dictionary = {}   # uid -> TreeItem
 # =================Xây dựng lại toàn bộ Hierarchy Tree====================
 var locked_uids: Array = []
 func _build_hierarchy_tree():
+	#print("hier_tree.columns = ", hier_tree.columns)
 	if not is_instance_valid(hier_tree):
 		return
 	

@@ -53,7 +53,7 @@ func _ready() -> void:
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 12)
-	scroll.add_child(body)
+	#scroll.add_child(body)
 
 	var body_pad := MarginContainer.new()
 	body_pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL

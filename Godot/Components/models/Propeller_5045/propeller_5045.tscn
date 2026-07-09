@@ -4,3 +4,5 @@
 
 [node name="Propeller_5045" unique_id=670695208 instance=ExtResource("1_0avvi")]
 transform = Transform3D(1.6, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 0, 0, 0)
+
+[node name="Mesh_0" parent="." index="0" unique_id=808850290 groups=["prop_blade"]]
