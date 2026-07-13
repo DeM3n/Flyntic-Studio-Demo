@@ -55,16 +55,17 @@ extends Control
 #Thanh tim kiem tren CompPanel
 var _search_text: String = ""
 var _active_filters: Array = []  # rỗng = hiện tất cả
-var sim_step_distance_traveled: float = 0.0
+#var sim_step_distance_traveled: float = 0.0
 @onready var search_box: LineEdit = $Root/Content/Left/CompPanel/V/SearchBox
 @onready var filter_btn: MenuButton = $Root/Content/Left/CompPanel/V/FilterButton
 # Scale factors for components
 const OBJ_SCALE := 0.01 # convert mm to Godot units
 
 # Physics bridge
-var bridge: Node = null
-var bridge_connected := false
-var use_bridge_physics := true  # Set false to force kinematic fallback
+#var bridge: Node = null
+#var bridge_connected := false
+#var use_bridge_physics := true  # Set false to force kinematic fallback
+var sim_runtime: DroneSimulationRuntime
 var wiring_panel: Control = null
 var CATEGORIES := {
 	"FRAME": ["PVC Pipe Frame", "Carbon Fiber Body"],
@@ -150,7 +151,20 @@ func _ready():
 	_build_comp_list()
 	_build_floor()
 	_build_grid()
+	# ── Khởi tạo Simulation Runtime TRƯỚC khi đặt Frame, để set_drone_root
+	# có chỗ nhận ngay sau khi _place() tạo drone_root ──
+	sim_runtime = DroneSimulationRuntime.new()
+	sim_runtime.name = "SimulationRuntime"
+	add_child(sim_runtime)
+	sim_runtime.placed = placed
+	sim_runtime.sim_label = sim_label
+	sim_runtime.topbar_status = topbar_status
+	sim_runtime.components_group = components_group
+	sim_runtime.log_requested.connect(_log)
+	sim_runtime.ui_lock_requested.connect(_on_sim_ui_lock_requested)
+	#==========================####
 	_place("PVC Pipe Frame", Vector3.ZERO)
+	sim_runtime.set_drone_root(drone_root)
 	_focus_camera_on_drone()
 	_update_all()
 	play_btn.pressed.connect(_on_play)
@@ -165,7 +179,8 @@ func _ready():
 	# Pre-populate workspace with a standard 'When flag clicked' stack
 	_create_block("start", "When ⚐ clicked", Color(0.85, 0.65, 0), Vector2(50, 50))
 	# Initialize physics bridge
-	_init_bridge()
+	#_init_bridge()
+	sim_runtime.init_bridge()
 	var w2d = load("res://Wiring.gd").new() 
 	w2d.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT) 
 	wiring_panel = w2d # KHÔNG add_child(w2d) vào tabs nữa — DockManager tự xử lý 
@@ -204,7 +219,15 @@ func _ready():
 	_fix_right_panel_labels()
 	add_to_group("main_controller")
 
-
+## MỚI: Runtime phát signal này lúc lock/unlock UI trong lúc bay (chỉ khi bridge active,
+## giữ đúng behavior gốc). Main.gd chịu trách nhiệm biết panel nào cần khóa.
+func _on_sim_ui_lock_requested(locked: bool) -> void:
+	var filter = Control.MOUSE_FILTER_IGNORE if locked else Control.MOUSE_FILTER_STOP
+	comp_list.mouse_filter = filter
+	hier_tree.mouse_filter = filter
+	hier_del_btn.disabled = locked
+	for btn in toolbox_v.get_children():
+		if btn is Button: btn.disabled = locked
 func _fix_right_panel_labels() -> void:
 	var hbox_paths = [
 		"Root/Content/CenterRight/Right/Scroll/V/Perf/Weight",
@@ -246,27 +269,27 @@ func _print_layout_debug() -> void:
 			n.offset_left, n.offset_top, n.offset_right, n.offset_bottom,
 			n.size
 		])
-func _init_bridge():
-	var bridge_script = load("res://PhysicsBridge.gd")
-	if bridge_script == null:
-		_log("PhysicsBridge.gd not found — kinematic mode only", "warning")
-		return
-	bridge = Node.new()
-	bridge.set_script(bridge_script)
-	bridge.name = "PhysicsBridge"
-	add_child(bridge)
-	bridge.bridge_connected.connect(_on_bridge_connected)
-	bridge.bridge_disconnected.connect(_on_bridge_disconnected)
-	bridge.state_received.connect(_on_bridge_state)
-	_log("Physics bridge initialized — connecting to TCP server...", "info")
-
-func _on_bridge_connected():
-	bridge_connected = true
-	_log("Bridge: Connected (" + bridge.bridge_mode + " mode)", "success")
-
-func _on_bridge_disconnected():
-	bridge_connected = false
-	_log("Bridge: Disconnected — using kinematic fallback", "warning")
+#func _init_bridge():
+	#var bridge_script = load("res://PhysicsBridge.gd")
+	#if bridge_script == null:
+		#_log("PhysicsBridge.gd not found — kinematic mode only", "warning")
+		#return
+	#bridge = Node.new()
+	#bridge.set_script(bridge_script)
+	#bridge.name = "PhysicsBridge"
+	#add_child(bridge)
+	#bridge.bridge_connected.connect(_on_bridge_connected)
+	#bridge.bridge_disconnected.connect(_on_bridge_disconnected)
+	#bridge.state_received.connect(_on_bridge_state)
+	#_log("Physics bridge initialized — connecting to TCP server...", "info")
+#
+#func _on_bridge_connected():
+	#bridge_connected = true
+	#_log("Bridge: Connected (" + bridge.bridge_mode + " mode)", "success")
+#
+#func _on_bridge_disconnected():
+	#bridge_connected = false
+	#_log("Bridge: Disconnected — using kinematic fallback", "warning")
 
 #======Block
 func _setup_blocks():
@@ -783,7 +806,8 @@ func _build_grid():
 
 # ──────────────────────────── INPUT ───────────────────────────────
 func _input(event):
-
+	if sim_runtime == null:
+		return
 	if $Root/TutorialOverlay.visible:
 		return
 	# CRITICAL: Ignore 3D interactions if we are not ở Canvas tab hoặc đang simulation
@@ -793,7 +817,8 @@ func _input(event):
 		return
 
 	# Nếu đang simulation thì chỉ cho phép điều khiển camera (orbit, pan, zoom), KHÔNG cho phép chọn, thêm, xóa, di chuyển, wiring
-	var sim_locked = sim_state == "playing"
+	#var sim_locked = sim_state == "playing"
+	var sim_locked = sim_runtime.sim_state == "playing"
 
 	if event is InputEventMouseButton:
 		var in_canvas = vpc.get_global_rect().has_point(get_global_mouse_position())
@@ -898,8 +923,12 @@ func _process(_delta):
 	_update_block_snap_preview()
 
 func _physics_process(delta: float) -> void:
-	if sim_state == "playing":
-		_simulate(delta)
+	#if sim_state == "playing":
+		#_simulate(delta)
+	if sim_runtime == null:
+		return
+	if sim_runtime.sim_state == "playing":
+		sim_runtime.tick(delta, sim_runtime.preflight_check())
 func _update_block_snap_preview():
 # Tìm block đang drag bằng cách scan tất cả blocks
 	var dragging_block = null
@@ -1120,6 +1149,7 @@ func _place(id: String, pos: Vector3, port_name: String = "", parent_uid: int = 
 			if drone_root == null:
 				drone_root = Node3D.new()
 				drone_root.name = "DroneRoot"
+				sim_runtime.set_drone_root(drone_root)
 				components_group.add_child(drone_root)
 				wires_group.get_parent().remove_child(wires_group)
 				drone_root.add_child(wires_group)
@@ -1151,7 +1181,8 @@ var _ghost_children: Array[Dictionary] = []
 
 
 func _rebuild_wires():
-	if sim_state == "playing":
+	#if sim_state == "playing":
+	if sim_runtime.sim_state == "playing":
 		return # Block wiring changes during simulation
 	_clear_children(wires_group)
 	# Find frame center for wiring hub
@@ -1169,7 +1200,8 @@ func _rebuild_wires():
 			_add_wire(c.node.global_position, center)
 
 func _add_wire(from: Vector3, to: Vector3):
-	if sim_state == "playing":
+	#if sim_state == "playing":
+	if sim_runtime.sim_state == "playing":
 		return # Block adding wires during simulation
 	var dist = from.distance_to(to)
 	if dist < 0.1:
@@ -1342,11 +1374,8 @@ func _build_frame_procedural(root: Node3D):
 
 	root.position.y = 0.7
 
-
-
 # ──────────────────────────── SIMULATION ──────────────────────────
 func _on_play():
-	# Kiem tra ket noi day trc khi play
 	if is_instance_valid(wiring_panel) and wiring_panel.has_method("is_wiring_complete"):
 		var wiring_check = wiring_panel.is_wiring_complete()
 		if not wiring_check.ok:
@@ -1355,119 +1384,65 @@ func _on_play():
 			topbar_status.text = "error"
 			tabs.current_tab = 2
 			return
-		# Check motor type trước
 	var motor_types := []
 	for c in placed:
 		if c.type == "Motor" and not motor_types.has(c.id):
 			motor_types.append(c.id)
-	
 	if motor_types.size() > 1:
 		_log("SYSTEM ERROR: Mixed motor types — all motors must be identical", "error")
 		sim_label.text = "ERROR"
 		topbar_status.text = "error"
 		return
-	var check = _preflight_check()
-	# Only block play if basic structure is missing
-	
+
+	var check = sim_runtime.preflight_check()
 	if check.reason == "No frame" or check.reason == "No battery":
 		_log("SYSTEM ERROR: " + check.reason, "error")
 		sim_label.text = "ERROR"
 		return
 	_cancel_ghost()
-	# Start simulation state
-	sim_state = "playing"
-	sim_time = 0.0
-	sim_step_idx = 0
-	sim_step_timer = 0.0
-	sim_target_pos = Vector3.ZERO # Start at floor
-	sim_label.text = "Idle/Armed"
-	topbar_status.text = "playing"
-	
-	# Find the 'start' block and build the sequence
-	sim_sequence = []
+
+	# Parse block sequence từ Block Editor UI -- CHƯA tách module này,
+	# nên vẫn nằm ở Main.gd. sim_runtime chỉ nhận Array[Dictionary] thô.
+	var sequence: Array[Dictionary] = []
 	var start_block = null
 	for child in workspace.get_children():
 		if is_instance_valid(child) and "block_type" in child and child.block_type == "start":
 			start_block = child
 			break
-	
 	if start_block:
-		_parse_block_stack(start_block)
-	
-	if sim_sequence.size() == 0:
+		_parse_block_stack_into(start_block, sequence)
+
+	if sequence.size() == 0:
 		_log("No sequence to execute. Connect blocks to 'When flag clicked'!", "warning")
 		return
 
-	_log("Executing Flight Plan: " + str(sim_sequence.size()) + " steps", "info")
-	
-	sim_state = "playing"
-	sim_time = 0.0
-	sim_step_idx = 0
-	sim_step_timer = 0.0
-	sim_target_pos = Vector3.ZERO
-	sim_target_rot = Vector3.ZERO
-	sim_label.text = "Flying..."
-	topbar_status.text = "playing"
-	
-	# ── PhysicsBridge: Configure and arm ──
-	if _bridge_active():
-		var tw := 0.0
-		var tt := 0.0
-		var motor_with_prop_count := 0
-		
-		# Identify all propellers and find their parent motor IDs
-		var prop_parents = []
-		for c in placed:
-			if c.type == "Propeller":
-				prop_parents.append(c.parent_id)
-		
-		for c in placed:
-			var d = ComponentFactory.COMPONENTS[c.id]
-			tw += d.weight
-			tt += d.thrust
-			if d.type == "Motor":
-				if c.uid in prop_parents:
-					motor_with_prop_count += 1
-		
-		# Update UI state to "Locked"
-		comp_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hier_tree.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hier_del_btn.disabled = true
-		for btn in toolbox_v.get_children():
-			if btn is Button: btn.disabled = true
-		
-		bridge.cmd_set_drone(tw / 1000.0, motor_with_prop_count, tt / 1000.0 * 9.81)
-		bridge.cmd_arm()
-		_log("Bridge: Drone configured (%.0fg, %d functional motors) & armed" % [tw, motor_with_prop_count], "info")
+	_log("Executing Flight Plan: " + str(sequence.size()) + " steps", "info")
+	sim_runtime.start(sequence)
 
 
-func _parse_block_stack(block):
+func _parse_block_stack_into(block: Panel, sequence: Array[Dictionary]) -> void:
 	if not is_instance_valid(block): return
-	
-	# Tìm block nào đang nằm ngay bên dưới block này (theo position)
 	var next_block = _find_block_below(block)
 	if next_block == null: return
-	
+
 	var val = 0.0
 	var input_node = next_block.get_node_or_null("input_bg/Input")
 	if is_instance_valid(input_node) and input_node is LineEdit:
 		val = input_node.text.to_float()
 		if val <= 0.0: val = 50.0
-	
+
 	var duration = max(1.0, (val * 0.05) / 2.0)
-	sim_sequence.append({
+	sequence.append({
 		"type": next_block.block_type,
 		"value": val,
 		"duration": duration})
-	
-	# Tiếp tục tìm block tiếp theo bên dưới
-	_parse_block_stack(next_block)
 
+	_parse_block_stack_into(next_block, sequence)
 
 
 func _find_block_below(block: Panel) -> Panel:
 	if not is_instance_valid(block): return null
-	var threshold = 20.0  # Pixel tolerance
+	var threshold = 20.0
 	var expected_y = block.position.y + block.custom_minimum_size.y
 	var best: Panel = null
 	var best_dist = threshold 
@@ -1483,45 +1458,199 @@ func _find_block_below(block: Panel) -> Panel:
 			best = child   
 	return best
 
+
 func _on_pause():
-	if sim_state == "playing":
-		sim_state = "paused"
-		sim_label.text = "Paused"
-		topbar_status.text = "paused"
+	sim_runtime.pause()
+
 
 func _on_stop():
-	sim_state = "stopped"
-	sim_label.text = "Ready"
-	topbar_status.text = "stopped"
-	# Reset positions
-	if drone_root:
-		drone_root.rotation = Vector3.ZERO
-		drone_root.position = Vector3.ZERO
+	sim_runtime.stop()
+	_rebuild_wires()  # CRITICAL: rebuild wires ở home position, tránh "bulging"
 
-	sim_step_idx = 0
-	# CRITICAL: Rebuild wires at home position to prevent "bulging"
-	_rebuild_wires()
-	# Stop bridge simulation
-	if _bridge_active():
-		bridge.cmd_stop()
-		_log("Bridge: Simulation stopped & reset", "info")
-	
-	# Unlock UI
-	#comp_list.enabled = true
-	#hier_tree.enabled = true
-	comp_list.mouse_filter = Control.MOUSE_FILTER_STOP
-	hier_tree.mouse_filter = Control.MOUSE_FILTER_STOP
-
-	hier_del_btn.disabled = false
-	for btn in toolbox_v.get_children():
-		if btn is Button: btn.disabled = false
-
+## ──────────────────────────── SIMULATION ──────────────────────────
+#func _on_play():
+	## Kiem tra ket noi day trc khi play
+	#if is_instance_valid(wiring_panel) and wiring_panel.has_method("is_wiring_complete"):
+		#var wiring_check = wiring_panel.is_wiring_complete()
+		#if not wiring_check.ok:
+			#_log("SYSTEM ERROR: " + wiring_check.reason, "error")
+			#sim_label.text = "ERROR"
+			#topbar_status.text = "error"
+			#tabs.current_tab = 2
+			#return
+		## Check motor type trước
+	#var motor_types := []
+	#for c in placed:
+		#if c.type == "Motor" and not motor_types.has(c.id):
+			#motor_types.append(c.id)
+	#
+	#if motor_types.size() > 1:
+		#_log("SYSTEM ERROR: Mixed motor types — all motors must be identical", "error")
+		#sim_label.text = "ERROR"
+		#topbar_status.text = "error"
+		#return
+	#var check = _preflight_check()
+	## Only block play if basic structure is missing
+	#
+	#if check.reason == "No frame" or check.reason == "No battery":
+		#_log("SYSTEM ERROR: " + check.reason, "error")
+		#sim_label.text = "ERROR"
+		#return
+	#_cancel_ghost()
+	## Start simulation state
+	#sim_state = "playing"
+	#sim_time = 0.0
+	#sim_step_idx = 0
+	#sim_step_timer = 0.0
+	#sim_target_pos = Vector3.ZERO # Start at floor
+	#sim_label.text = "Idle/Armed"
+	#topbar_status.text = "playing"
+	#
+	## Find the 'start' block and build the sequence
+	#sim_sequence = []
+	#var start_block = null
+	#for child in workspace.get_children():
+		#if is_instance_valid(child) and "block_type" in child and child.block_type == "start":
+			#start_block = child
+			#break
+	#
+	#if start_block:
+		#_parse_block_stack(start_block)
+	#
+	#if sim_sequence.size() == 0:
+		#_log("No sequence to execute. Connect blocks to 'When flag clicked'!", "warning")
+		#return
+#
+	#_log("Executing Flight Plan: " + str(sim_sequence.size()) + " steps", "info")
+	#
+	#sim_state = "playing"
+	#sim_time = 0.0
+	#sim_step_idx = 0
+	#sim_step_timer = 0.0
+	#sim_target_pos = Vector3.ZERO
+	#sim_target_rot = Vector3.ZERO
+	#sim_label.text = "Flying..."
+	#topbar_status.text = "playing"
+	#
+	## ── PhysicsBridge: Configure and arm ──
+	#if _bridge_active():
+		#var tw := 0.0
+		#var tt := 0.0
+		#var motor_with_prop_count := 0
+		#
+		## Identify all propellers and find their parent motor IDs
+		#var prop_parents = []
+		#for c in placed:
+			#if c.type == "Propeller":
+				#prop_parents.append(c.parent_id)
+		#
+		#for c in placed:
+			#var d = ComponentFactory.COMPONENTS[c.id]
+			#tw += d.weight
+			#tt += d.thrust
+			#if d.type == "Motor":
+				#if c.uid in prop_parents:
+					#motor_with_prop_count += 1
+		#
+		## Update UI state to "Locked"
+		#comp_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		#hier_tree.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		#hier_del_btn.disabled = true
+		#for btn in toolbox_v.get_children():
+			#if btn is Button: btn.disabled = true
+		#
+		#bridge.cmd_set_drone(tw / 1000.0, motor_with_prop_count, tt / 1000.0 * 9.81)
+		#bridge.cmd_arm()
+		#_log("Bridge: Drone configured (%.0fg, %d functional motors) & armed" % [tw, motor_with_prop_count], "info")
+#
+#
+#func _parse_block_stack(block):
+	#if not is_instance_valid(block): return
+	#
+	## Tìm block nào đang nằm ngay bên dưới block này (theo position)
+	#var next_block = _find_block_below(block)
+	#if next_block == null: return
+	#
+	#var val = 0.0
+	#var input_node = next_block.get_node_or_null("input_bg/Input")
+	#if is_instance_valid(input_node) and input_node is LineEdit:
+		#val = input_node.text.to_float()
+		#if val <= 0.0: val = 50.0
+	#
+	#var duration = max(1.0, (val * 0.05) / 2.0)
+	#sim_sequence.append({
+		#"type": next_block.block_type,
+		#"value": val,
+		#"duration": duration})
+	#
+	## Tiếp tục tìm block tiếp theo bên dưới
+	#_parse_block_stack(next_block)
+#
+#
+#
+#func _find_block_below(block: Panel) -> Panel:
+	#if not is_instance_valid(block): return null
+	#var threshold = 20.0  # Pixel tolerance
+	#var expected_y = block.position.y + block.custom_minimum_size.y
+	#var best: Panel = null
+	#var best_dist = threshold 
+	#for child in workspace.get_children():
+		#if not is_instance_valid(child): continue
+		#if child == block: continue
+		#if not "block_type" in child: continue
+		#if child.block_type == "start": continue        
+		#var dy = abs(child.position.y - expected_y)
+		#var dx = abs(child.position.x - block.position.x)      
+		#if dy < best_dist and dx < 30.0:
+			#best_dist = dy
+			#best = child   
+	#return best
+#
+#func _on_pause():
+	#if sim_state == "playing":
+		#sim_state = "paused"
+		#sim_label.text = "Paused"
+		#topbar_status.text = "paused"
+#
+#func _on_stop():
+	#sim_state = "stopped"
+	#sim_label.text = "Ready"
+	#topbar_status.text = "stopped"
+	## Reset positions
+	#if drone_root:
+		#drone_root.rotation = Vector3.ZERO
+		#drone_root.position = Vector3.ZERO
+#
+	#sim_step_idx = 0
+	## CRITICAL: Rebuild wires at home position to prevent "bulging"
+	#_rebuild_wires()
+	## Stop bridge simulation
+	#if _bridge_active():
+		#bridge.cmd_stop()
+		#_log("Bridge: Simulation stopped & reset", "info")
+	#
+	## Unlock UI
+	##comp_list.enabled = true
+	##hier_tree.enabled = true
+	#comp_list.mouse_filter = Control.MOUSE_FILTER_STOP
+	#hier_tree.mouse_filter = Control.MOUSE_FILTER_STOP
+#
+	#hier_del_btn.disabled = false
+	#for btn in toolbox_v.get_children():
+		#if btn is Button: btn.disabled = false
+#
+### không chỉ node đầu tiên. An toàn cho cả model 1-mesh lẫn model nhiều-mesh.
+#func _collect_group_nodes(node: Node, group_name: String, results: Array) -> void:
+	#if node.is_in_group(group_name):
+		#results.append(node)
+	#for child in node.get_children():
+		#_collect_group_nodes(child, group_name, results)
+#
+#
 #func _simulate(delta: float):
 	#sim_time += delta
 	#var check = _preflight_check()
-	## 1. Propeller Spin — use bridge RPMs if available
-	##print("capability: ", check.capability, " | use_native_physics: ", use_native_physics, " | bridge_active: ", _bridge_active())
-	#
+#
 	#if sim_state == "playing":
 		#var bridge_rpms = []
 		#if _bridge_active():
@@ -1529,297 +1658,259 @@ func _on_stop():
 		#var prop_idx := 0
 		#for comp in placed:
 			#if is_instance_valid(comp.get("node")) and comp.type == "Propeller":
-				#for ch in comp.node.get_children():
-					#if is_instance_valid(ch) and ch.name == "prop_blade":
-						#var spin_speed := 35.0
-						#if prop_idx < bridge_rpms.size() and bridge_rpms[prop_idx] > 0:
-							#spin_speed = bridge_rpms[prop_idx] / 150.0  # Increased multiplier for realism
-						#ch.rotation.y += delta * spin_speed
-						#prop_idx += 1
+				#var blades: Array = []
+				#_collect_group_nodes(comp.node, "prop_blade", blades)
+#
+				#if not blades.is_empty():
+					#var spin_speed := 35.0
+					#if prop_idx < bridge_rpms.size() and bridge_rpms[prop_idx] > 0:
+						#spin_speed = bridge_rpms[prop_idx] / 150.0
+					#for blade in blades:
+						#blade.rotation.y += delta * spin_speed
+#
+				#prop_idx += 1  # tăng theo SỐ PROPELLER, không theo số blade tìm được
 #
 	#if check.capability == "Cannot fly" and not _bridge_active():
 		#components_group.position.y = lerp(components_group.position.y, 0.0, 0.08)
 		#return
-	#
-	## ── BRIDGE PHYSICS MODE ──
+#
 	#if _bridge_active() and use_bridge_physics:
 		#_simulate_bridge(delta)
 		#return
-#
-	## ── KINEMATIC FALLBACK MODE ──
 	#_simulate_kinematic(delta, check)
-## không chỉ node đầu tiên. An toàn cho cả model 1-mesh lẫn model nhiều-mesh.
-func _collect_group_nodes(node: Node, group_name: String, results: Array) -> void:
-	if node.is_in_group(group_name):
-		results.append(node)
-	for child in node.get_children():
-		_collect_group_nodes(child, group_name, results)
-
-
-func _simulate(delta: float):
-	sim_time += delta
-	var check = _preflight_check()
-
-	if sim_state == "playing":
-		var bridge_rpms = []
-		if _bridge_active():
-			bridge_rpms = bridge.get_motor_rpms()
-		var prop_idx := 0
-		for comp in placed:
-			if is_instance_valid(comp.get("node")) and comp.type == "Propeller":
-				var blades: Array = []
-				_collect_group_nodes(comp.node, "prop_blade", blades)
-
-				if not blades.is_empty():
-					var spin_speed := 35.0
-					if prop_idx < bridge_rpms.size() and bridge_rpms[prop_idx] > 0:
-						spin_speed = bridge_rpms[prop_idx] / 150.0
-					for blade in blades:
-						blade.rotation.y += delta * spin_speed
-
-				prop_idx += 1  # tăng theo SỐ PROPELLER, không theo số blade tìm được
-
-	if check.capability == "Cannot fly" and not _bridge_active():
-		components_group.position.y = lerp(components_group.position.y, 0.0, 0.08)
-		return
-
-	if _bridge_active() and use_bridge_physics:
-		_simulate_bridge(delta)
-		return
-	_simulate_kinematic(delta, check)
-func _bridge_active() -> bool:
-	"""Check if bridge is available and connected."""
-	return bridge != null and bridge_connected and is_instance_valid(bridge)
-
-func _simulate_bridge(delta: float):
-	"""Simulation driven by real physics from bridge (Gazebo/standalone)."""
-	# Step processing: send commands to bridge based on block sequence
-	if sim_state == "playing" and sim_step_idx < sim_sequence.size():
-		var step = sim_sequence[sim_step_idx]
-		sim_step_timer += delta
-		
-		# Send bridge commands only when step starts or changes
-		if sim_step_timer <= delta * 2:  # First frame of step
-			match step.type:
-				"take_off":
-					bridge.cmd_takeoff(2.5)
-					_log("Bridge → Takeoff to 2.5m", "info")
-				"forward":
-					var speed = step.value * 0.05 / step.duration
-					var fwd = -components_group.global_transform.basis.z.normalized()
-					fwd.y = 0; fwd = fwd.normalized()
-					bridge.cmd_move(fwd.x * speed, 0.0, fwd.z * speed)
-					_log("Bridge → Move forward %.1f cm (%.2f m/s)" % [step.value, speed], "info")
-				"hover":
-					bridge.cmd_hover()
-					_log("Bridge → Hover", "info")
-				"land":
-					bridge.cmd_land()
-					_log("Bridge → Land", "info")
-
-		if sim_step_timer >= step.duration:
-			sim_step_idx += 1
-			sim_step_timer = 0.0
-			if sim_step_idx < sim_sequence.size():
-				_log("Step " + str(sim_step_idx + 1) + ": Executing " + sim_sequence[sim_step_idx].type, "info")
-			else:
-				bridge.cmd_hover()  # Hold position after program ends
-				_log("Program finished — hovering", "success")
-				sim_label.text = "Finished"
-
-	# Position/rotation update happens in _on_bridge_state callback
-
-func _on_bridge_state(state: Dictionary):
-	"""Callback: apply physics state from bridge to the 3D drone visual."""
-	if sim_state != "playing" and sim_state != "paused":
-		return
-	
-	var pos_arr = state.get("pos", [0, 0, 0])
-	var rot_arr = state.get("rot", [0, 0, 0, 1])
-	
-	# Apply position from physics engine
-	var target_pos = Vector3(pos_arr[0], pos_arr[1], pos_arr[2])
-	components_group.position = components_group.position.lerp(target_pos, 0.3)
-	
-	# Apply quaternion rotation from physics engine
-	var quat = Quaternion(rot_arr[0], rot_arr[1], rot_arr[2], rot_arr[3])
-	var target_euler = quat.get_euler()
-	components_group.rotation = components_group.rotation.lerp(target_euler, 0.3)
-	
-	# Update status display
-	var status_text = state.get("status", "unknown")
-	if sim_state == "playing":
-		sim_label.text = status_text.capitalize()
-
-
-func _get_flight_params() -> Dictionary:
-	if drone_root == null or placed.is_empty():
-		return {"speed": 1.0, "climb": 0.05, "responsiveness": 0.1}
-
-	var props = DronePhysicsModel.compute_mass_properties(placed, ComponentFactory.COMPONENTS, drone_root)
-	var twr = DronePhysicsModel.thrust_to_weight_ratio(props.motors, props.total_mass_kg)
-
-	# TWR 2.0 = mức chuẩn (baseline), drone vừa đủ bay ổn
-	# TWR 4.0+ = motor rất khỏe, bay nhanh
-	# TWR < 2.0 = cận giới hạn bay, rất chậm
-	var speed_factor := clampf(twr / 2.0, 0.3, 3.0)
-
-	var voltage := DronePhysicsModel.get_battery_voltage(placed, ComponentFactory.COMPONENTS)
-	var avg_kv := DronePhysicsModel.average_motor_kv(props.motors)
-	# mismatch_factor giờ tính theo TỪNG CẶP motor-propeller thật (worst-case),
-	# không còn pha loãng qua trung bình toàn hệ thống
-	var mismatch_factor := DronePhysicsModel.get_kv_mismatch_factor(props.motors)
-	# kv_factor theo RPM tham chiếu thật (KV × V), không chỉ KV thô
-	var rpm_ref := 1500.0 * 14.8  # baseline: 1500KV @ 4S
-	var kv_factor: float = clamp((avg_kv * voltage) / rpm_ref, 0.4, 2.0)
-	var esc_factor := DronePhysicsModel.get_esc_overload_factor(placed, ComponentFactory.COMPONENTS)
-
-	return {
-		"speed": speed_factor * mismatch_factor * esc_factor,
-		"climb": 0.03 * speed_factor * mismatch_factor * esc_factor,
-		"responsiveness": clamp(0.05 * kv_factor, 0.02, 0.15),
-		"accel_response": clamp(0.08 * kv_factor, 0.03, 0.25),
-	}
-
-func _simulate_kinematic(delta: float, check: Dictionary):
-	if drone_root == null: return
-	
-	var fp = _get_flight_params()
-	
-	if sim_state == "playing" and sim_step_idx < sim_sequence.size():
-		var step = sim_sequence[sim_step_idx]
-		sim_step_timer += delta
-		
-		var step_finished := false
-		
-		match step.type:
-			"take_off":
-				sim_target_pos.y = 2.5
-				step_finished = sim_step_timer >= step.duration
-			"forward":
-				var target_dist = step.value * 0.05  # cm -> Godot units, CỐ ĐỊNH
-				if sim_step_timer <= delta:
-					sim_step_distance_traveled = 0.0
-					sim_current_speed_mult = 0.0
-					_log("▶ Forward bắt đầu | dist: %.0f cm | speed_factor: %.2f" % [step.value, fp.speed], "info")
-				sim_current_speed_mult = lerp(sim_current_speed_mult, 1.0, fp.accel_response)
-				var base_speed := 1.0  # units/s ở speed_factor = 1.0 — tune lại theo cảm giác bay
-				var move_step: float = base_speed * fp.speed * sim_current_speed_mult * delta
-				move_step = min(move_step, target_dist - sim_step_distance_traveled)
-				
-				var forward_dir = -drone_root.global_transform.basis.z
-				forward_dir.y = 0
-				forward_dir = forward_dir.normalized()
-				
-				sim_target_pos += forward_dir * move_step
-				sim_step_distance_traveled += move_step
-				if sim_target_pos.y < 2.0: sim_target_pos.y = 2.5
-				
-				step_finished = sim_step_distance_traveled >= target_dist - 0.001
-				if step_finished:
-					_log("✔ Forward xong | dist: %.0f cm | thời gian thực tế: %.2f s" % [step.value, sim_step_timer], "success")
-			"hover":
-				step_finished = sim_step_timer >= step.duration
-			"land":
-				if sim_step_timer <= delta:
-					sim_current_speed_mult = 0.0
-					_log("▶ Landing bắt đầu | speed_factor: %.2f" % fp.speed, "info")
-				sim_current_speed_mult = lerp(sim_current_speed_mult, 1.0, fp.accel_response)
-
-				var descent_speed: float = 1.5 * float(fp.speed) * sim_current_speed_mult
-				sim_target_pos.y = max(0.0, sim_target_pos.y - descent_speed * delta)
-
-				var reached_ground: bool = sim_target_pos.y <= 0.001
-				var timed_out: bool = sim_step_timer >= float(step.duration)
-				step_finished = reached_ground or timed_out
-				if timed_out and not reached_ground:
-					sim_target_pos.y = 0.0
-				if step_finished:
-					_log("✔ Landing xong | %.2f s" % sim_step_timer, "success")
-				#sim_target_pos.y = 0.0
+#func _bridge_active() -> bool:
+	#"""Check if bridge is available and connected."""
+	#return bridge != null and bridge_connected and is_instance_valid(bridge)
+#
+#func _simulate_bridge(delta: float):
+	#"""Simulation driven by real physics from bridge (Gazebo/standalone)."""
+	## Step processing: send commands to bridge based on block sequence
+	#if sim_state == "playing" and sim_step_idx < sim_sequence.size():
+		#var step = sim_sequence[sim_step_idx]
+		#sim_step_timer += delta
+		#
+		## Send bridge commands only when step starts or changes
+		#if sim_step_timer <= delta * 2:  # First frame of step
+			#match step.type:
+				#"take_off":
+					#bridge.cmd_takeoff(2.5)
+					#_log("Bridge → Takeoff to 2.5m", "info")
+				#"forward":
+					#var speed = step.value * 0.05 / step.duration
+					#var fwd = -components_group.global_transform.basis.z.normalized()
+					#fwd.y = 0; fwd = fwd.normalized()
+					#bridge.cmd_move(fwd.x * speed, 0.0, fwd.z * speed)
+					#_log("Bridge → Move forward %.1f cm (%.2f m/s)" % [step.value, speed], "info")
+				#"hover":
+					#bridge.cmd_hover()
+					#_log("Bridge → Hover", "info")
+				#"land":
+					#bridge.cmd_land()
+					#_log("Bridge → Land", "info")
+#
+		#if sim_step_timer >= step.duration:
+			#sim_step_idx += 1
+			#sim_step_timer = 0.0
+			#if sim_step_idx < sim_sequence.size():
+				#_log("Step " + str(sim_step_idx + 1) + ": Executing " + sim_sequence[sim_step_idx].type, "info")
+			#else:
+				#bridge.cmd_hover()  # Hold position after program ends
+				#_log("Program finished — hovering", "success")
+				#sim_label.text = "Finished"
+#
+	## Position/rotation update happens in _on_bridge_state callback
+#
+#func _on_bridge_state(state: Dictionary):
+	#"""Callback: apply physics state from bridge to the 3D drone visual."""
+	#if sim_state != "playing" and sim_state != "paused":
+		#return
+	#
+	#var pos_arr = state.get("pos", [0, 0, 0])
+	#var rot_arr = state.get("rot", [0, 0, 0, 1])
+	#
+	## Apply position from physics engine
+	#var target_pos = Vector3(pos_arr[0], pos_arr[1], pos_arr[2])
+	#components_group.position = components_group.position.lerp(target_pos, 0.3)
+	#
+	## Apply quaternion rotation from physics engine
+	#var quat = Quaternion(rot_arr[0], rot_arr[1], rot_arr[2], rot_arr[3])
+	#var target_euler = quat.get_euler()
+	#components_group.rotation = components_group.rotation.lerp(target_euler, 0.3)
+	#
+	## Update status display
+	#var status_text = state.get("status", "unknown")
+	#if sim_state == "playing":
+		#sim_label.text = status_text.capitalize()
+#
+#
+#func _get_flight_params() -> Dictionary:
+	#if drone_root == null or placed.is_empty():
+		#return {"speed": 1.0, "climb": 0.05, "responsiveness": 0.1}
+#
+	#var props = DronePhysicsModel.compute_mass_properties(placed, ComponentFactory.COMPONENTS, drone_root)
+	#var twr = DronePhysicsModel.thrust_to_weight_ratio(props.motors, props.total_mass_kg)
+#
+	## TWR 2.0 = mức chuẩn (baseline), drone vừa đủ bay ổn
+	## TWR 4.0+ = motor rất khỏe, bay nhanh
+	## TWR < 2.0 = cận giới hạn bay, rất chậm
+	#var speed_factor := clampf(twr / 2.0, 0.3, 3.0)
+#
+	#var voltage := DronePhysicsModel.get_battery_voltage(placed, ComponentFactory.COMPONENTS)
+	#var avg_kv := DronePhysicsModel.average_motor_kv(props.motors)
+	## mismatch_factor giờ tính theo TỪNG CẶP motor-propeller thật (worst-case),
+	## không còn pha loãng qua trung bình toàn hệ thống
+	#var mismatch_factor := DronePhysicsModel.get_kv_mismatch_factor(props.motors)
+	## kv_factor theo RPM tham chiếu thật (KV × V), không chỉ KV thô
+	#var rpm_ref := 1500.0 * 14.8  # baseline: 1500KV @ 4S
+	#var kv_factor: float = clamp((avg_kv * voltage) / rpm_ref, 0.4, 2.0)
+	#var esc_factor := DronePhysicsModel.get_esc_overload_factor(placed, ComponentFactory.COMPONENTS)
+#
+	#return {
+		#"speed": speed_factor * mismatch_factor * esc_factor,
+		#"climb": 0.03 * speed_factor * mismatch_factor * esc_factor,
+		#"responsiveness": clamp(0.05 * kv_factor, 0.02, 0.15),
+		#"accel_response": clamp(0.08 * kv_factor, 0.03, 0.25),
+	#}
+#
+#func _simulate_kinematic(delta: float, check: Dictionary):
+	#if drone_root == null: return
+	#
+	#var fp = _get_flight_params()
+	#
+	#if sim_state == "playing" and sim_step_idx < sim_sequence.size():
+		#var step = sim_sequence[sim_step_idx]
+		#sim_step_timer += delta
+		#
+		#var step_finished := false
+		#
+		#match step.type:
+			#"take_off":
+				#sim_target_pos.y = 2.5
 				#step_finished = sim_step_timer >= step.duration
-		
-		if step_finished:
-			sim_step_idx += 1
-			sim_step_timer = 0.0
-			sim_step_distance_traveled = 0.0
-			if sim_step_idx < sim_sequence.size():
-				_log("Step " + str(sim_step_idx + 1) + ": Executing " + sim_sequence[sim_step_idx].type, "info")
-			else:
-				_log("Program finished", "success")
-				sim_label.text = "Finished"
-	
-	var final_target = sim_target_pos
-	if check.capability == "Cannot fly":
-		final_target.y = 0.0
-	drone_root.position = drone_root.position.lerp(final_target, fp.climb)
-	
-	var displacement = (sim_target_pos - drone_root.position)
-	var dynamic_pitch = clamp(displacement.z * 0.3, -0.3, 0.3)
-	var dynamic_roll  = clamp(-displacement.x * 0.3, -0.3, 0.3)
-	
-	var tilt_x = check.tilt_x * 0.2 + dynamic_pitch + sin(sim_time * 1.5) * 0.01
-	var tilt_z = check.tilt_z * 0.2 + dynamic_roll  + cos(sim_time * 1.5) * 0.01
-	
-	drone_root.rotation.x = lerp(drone_root.rotation.x, tilt_x, fp.responsiveness)
-	drone_root.rotation.z = lerp(drone_root.rotation.z, tilt_z, fp.responsiveness)
-#-===============moi add vao
-
-#=========================================
-func _preflight_check() -> Dictionary:
-	var motors_with_props = []
-	var motors_total = 0
-	var has_frame := false
-	var has_battery := false
-
-	for c in placed:
-		var c_type = c["type"]
-		if c_type == "Frame": has_frame = true
-		elif c_type == "Battery": has_battery = true
-		elif c_type == "Motor": 
-			motors_total += 1
-			# Check if has prop
-			var has_p = false
-			for p in placed:
-				if p.parent_id == c.uid and p.type == "Propeller":
-					has_p = true
-					break
-			if has_p:
-				motors_with_props.append(c)
-
-	if not has_frame:
-		return {"capability": "Cannot fly", "reason": "No frame", "tilt_x": 0, "tilt_z": 0}
-	if not has_battery:
-		return {"capability": "Cannot fly", "reason": "No battery", "tilt_x": 0, "tilt_z": 0}
-	if motors_with_props.size() == 0:
-		return {"capability": "Cannot fly", "reason": "No motors with props", "tilt_x": 0, "tilt_z": 0}
-
-	# Real Physics: Each motor provides lift at its position
-	# Calculate total net force and torque
-	var total_lift := motors_with_props.size()
-	var torque_x := 0.0
-	var torque_z := 0.0
-	
-	for m in motors_with_props:
-		if is_instance_valid(m.node):
-			# Use LOCAL position for torque calculation
-			var lpos = m.node.position 
-			torque_x += lpos.z * 0.5
-			torque_z -= lpos.x * 0.5
-
-	var tilt_x = torque_x / max(total_lift, 1)
-	var tilt_z = torque_z / max(total_lift, 1)
-
-	var cap = "Stable"
-	if motors_with_props.size() < 4:
-		cap = "Unstable"
-		if motors_with_props.size() < 2:
-			return {"capability": "Cannot fly", "reason": "Asymmetric lift", "tilt_x": tilt_x, "tilt_z": tilt_z}
-	
-	if abs(tilt_x) > 1.0 or abs(tilt_z) > 1.0:
-		cap = "Unstable"
-
-	return {"capability": cap, "reason": "", "tilt_x": tilt_x, "tilt_z": tilt_z}
+			#"forward":
+				#var target_dist = step.value * 0.05  # cm -> Godot units, CỐ ĐỊNH
+				#if sim_step_timer <= delta:
+					#sim_step_distance_traveled = 0.0
+					#sim_current_speed_mult = 0.0
+					#_log("▶ Forward bắt đầu | dist: %.0f cm | speed_factor: %.2f" % [step.value, fp.speed], "info")
+				#sim_current_speed_mult = lerp(sim_current_speed_mult, 1.0, fp.accel_response)
+				#var base_speed := 1.0  # units/s ở speed_factor = 1.0 — tune lại theo cảm giác bay
+				#var move_step: float = base_speed * fp.speed * sim_current_speed_mult * delta
+				#move_step = min(move_step, target_dist - sim_step_distance_traveled)
+				#
+				#var forward_dir = -drone_root.global_transform.basis.z
+				#forward_dir.y = 0
+				#forward_dir = forward_dir.normalized()
+				#
+				#sim_target_pos += forward_dir * move_step
+				#sim_step_distance_traveled += move_step
+				#if sim_target_pos.y < 2.0: sim_target_pos.y = 2.5
+				#
+				#step_finished = sim_step_distance_traveled >= target_dist - 0.001
+				#if step_finished:
+					#_log("✔ Forward xong | dist: %.0f cm | thời gian thực tế: %.2f s" % [step.value, sim_step_timer], "success")
+			#"hover":
+				#step_finished = sim_step_timer >= step.duration
+			#"land":
+				#if sim_step_timer <= delta:
+					#sim_current_speed_mult = 0.0
+					#_log("▶ Landing bắt đầu | speed_factor: %.2f" % fp.speed, "info")
+				#sim_current_speed_mult = lerp(sim_current_speed_mult, 1.0, fp.accel_response)
+#
+				#var descent_speed: float = 1.5 * float(fp.speed) * sim_current_speed_mult
+				#sim_target_pos.y = max(0.0, sim_target_pos.y - descent_speed * delta)
+#
+				#var reached_ground: bool = sim_target_pos.y <= 0.001
+				#var timed_out: bool = sim_step_timer >= float(step.duration)
+				#step_finished = reached_ground or timed_out
+				#if timed_out and not reached_ground:
+					#sim_target_pos.y = 0.0
+				#if step_finished:
+					#_log("✔ Landing xong | %.2f s" % sim_step_timer, "success")
+				##sim_target_pos.y = 0.0
+				##step_finished = sim_step_timer >= step.duration
+		#
+		#if step_finished:
+			#sim_step_idx += 1
+			#sim_step_timer = 0.0
+			#sim_step_distance_traveled = 0.0
+			#if sim_step_idx < sim_sequence.size():
+				#_log("Step " + str(sim_step_idx + 1) + ": Executing " + sim_sequence[sim_step_idx].type, "info")
+			#else:
+				#_log("Program finished", "success")
+				#sim_label.text = "Finished"
+	#
+	#var final_target = sim_target_pos
+	#if check.capability == "Cannot fly":
+		#final_target.y = 0.0
+	#drone_root.position = drone_root.position.lerp(final_target, fp.climb)
+	#
+	#var displacement = (sim_target_pos - drone_root.position)
+	#var dynamic_pitch = clamp(displacement.z * 0.3, -0.3, 0.3)
+	#var dynamic_roll  = clamp(-displacement.x * 0.3, -0.3, 0.3)
+	#
+	#var tilt_x = check.tilt_x * 0.2 + dynamic_pitch + sin(sim_time * 1.5) * 0.01
+	#var tilt_z = check.tilt_z * 0.2 + dynamic_roll  + cos(sim_time * 1.5) * 0.01
+	#
+	#drone_root.rotation.x = lerp(drone_root.rotation.x, tilt_x, fp.responsiveness)
+	#drone_root.rotation.z = lerp(drone_root.rotation.z, tilt_z, fp.responsiveness)
+##-===============moi add vao
+#
+##=========================================
+#func _preflight_check() -> Dictionary:
+	#var motors_with_props = []
+	#var motors_total = 0
+	#var has_frame := false
+	#var has_battery := false
+#
+	#for c in placed:
+		#var c_type = c["type"]
+		#if c_type == "Frame": has_frame = true
+		#elif c_type == "Battery": has_battery = true
+		#elif c_type == "Motor": 
+			#motors_total += 1
+			## Check if has prop
+			#var has_p = false
+			#for p in placed:
+				#if p.parent_id == c.uid and p.type == "Propeller":
+					#has_p = true
+					#break
+			#if has_p:
+				#motors_with_props.append(c)
+#
+	#if not has_frame:
+		#return {"capability": "Cannot fly", "reason": "No frame", "tilt_x": 0, "tilt_z": 0}
+	#if not has_battery:
+		#return {"capability": "Cannot fly", "reason": "No battery", "tilt_x": 0, "tilt_z": 0}
+	#if motors_with_props.size() == 0:
+		#return {"capability": "Cannot fly", "reason": "No motors with props", "tilt_x": 0, "tilt_z": 0}
+#
+	## Real Physics: Each motor provides lift at its position
+	## Calculate total net force and torque
+	#var total_lift := motors_with_props.size()
+	#var torque_x := 0.0
+	#var torque_z := 0.0
+	#
+	#for m in motors_with_props:
+		#if is_instance_valid(m.node):
+			## Use LOCAL position for torque calculation
+			#var lpos = m.node.position 
+			#torque_x += lpos.z * 0.5
+			#torque_z -= lpos.x * 0.5
+#
+	#var tilt_x = torque_x / max(total_lift, 1)
+	#var tilt_z = torque_z / max(total_lift, 1)
+#
+	#var cap = "Stable"
+	#if motors_with_props.size() < 4:
+		#cap = "Unstable"
+		#if motors_with_props.size() < 2:
+			#return {"capability": "Cannot fly", "reason": "Asymmetric lift", "tilt_x": tilt_x, "tilt_z": tilt_z}
+	#
+	#if abs(tilt_x) > 1.0 or abs(tilt_z) > 1.0:
+		#cap = "Unstable"
+#
+	#return {"capability": cap, "reason": "", "tilt_x": tilt_x, "tilt_z": tilt_z}
 
 # ──────────────────────────── UPDATE UI ───────────────────────────
 
@@ -2342,6 +2433,7 @@ func _pick_existing():
 			wires_group.position = Vector3.ZERO
 		drone_root.queue_free()
 		drone_root = null
+		sim_runtime.set_drone_root(null)
 
 	# Free node gốc (children node bị free theo vì là con của nó)
 	if is_instance_valid(picked_entry.node):
@@ -2837,6 +2929,8 @@ func _clear_all():
 	if drone_root != null:
 		drone_root.queue_free()
 		drone_root = null
+		sim_runtime.set_drone_root(null)   # ← THÊM
+	sim_runtime.reset_esc_heat()
 	if wiring_panel != null:
 		wiring_panel.canvas_components.clear()
 		wiring_panel.connections.clear()
@@ -2985,42 +3079,7 @@ func _restore_deleted_component(comp_snapshot: Dictionary, children_snapshot: Ar
 
 func canvas_select_all() -> void:
 	_log("Select All: Canvas dùng single-select Tree, chưa hỗ trợ đa chọn", "warn")
-# ─────────────────────── UNSAVED CHANGES DIALOG ────────────────────
-#func _show_unsaved_dialog(on_proceed: Callable) -> void:
-	#get_window().grab_focus()
-	#print(">>> _show_unsaved_dialog bắt đầu")
-	#var dialog := ConfirmationDialog.new()
-	#dialog.title = "Unsaved Changes"
-	#dialog.dialog_text = "Bạn có thay đổi chưa lưu. Bạn có muốn lưu trước khi tiếp tục không?"
-	#dialog.ok_button_text = "Save"
-	#dialog.cancel_button_text = "Cancel"
-	#dialog.add_button("Don't Save", true, "discard")
-	#add_child(dialog)
-	#await get_tree().process_frame
-	#print(">>> dialog đã add_child, gọi popup_centered")
-	#dialog.popup_centered()
-	#print(">>> popup_centered xong, visible=", dialog.visible)
-#
-	#dialog.confirmed.connect(func():
-		#print(">>> confirmed pressed")
-		#if _current_path != "":
-			#_write_project(_current_path)
-			#dialog.queue_free()
-			#on_proceed.call()
-		#else:
-			#dialog.queue_free()
-			#_on_save_as_then(on_proceed)
-	#)
-	#dialog.custom_action.connect(func(action):
-		#print(">>> custom_action: ", action)
-		#if action == "discard":
-			#dialog.queue_free()
-			#on_proceed.call()
-	#)
-	#dialog.canceled.connect(func():
-		#print(">>> canceled")
-		#dialog.queue_free()
-	#)
+
 # ─────────────────────── UNSAVED CHANGES DIALOG (custom UI) ────────
 const _DLG_BG            := Color(0.145, 0.157, 0.184)
 const _DLG_BORDER        := Color(0.95, 0.65, 0.25)   # viền cam cảnh báo, nổi bật trên nền xám

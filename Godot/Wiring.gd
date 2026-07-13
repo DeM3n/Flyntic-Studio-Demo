@@ -548,6 +548,58 @@ func _draw_zoom_indicator():
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
 		Color(0.75, 0.75, 0.80, alpha))
 
+#func _draw_component(comp: Dictionary):
+	#var cv  = canvas
+	#var pos = comp.pos
+	#var sz  = comp.size
+	#var col = comp.color
+	#var rot = comp.get("rotation_deg", 0)
+#
+	## Push transform for rotation around component center
+	#var ctr = pos + sz * 0.5
+	#cv.draw_set_transform(pan_offset + ctr * zoom_level, deg_to_rad(rot), Vector2(zoom_level, zoom_level))
+	#var local_pos = -sz * 0.5   # draw relative to center
+#
+	## Shadow
+	#cv.draw_rect(Rect2(local_pos + Vector2(4,4), sz), Color(0,0,0,0.4), true)
+	## Body
+	#cv.draw_rect(Rect2(local_pos, sz), col.darkened(0.52), true)
+	## Top accent
+	#cv.draw_rect(Rect2(local_pos, Vector2(sz.x, 6)), col, true)
+	## Border — bright when selected
+	#var bc = Color(1,1,1,0.9) if comp.selected else col.lightened(0.1)
+	#var bw = 2.8 if comp.selected else 1.5
+	#cv.draw_rect(Rect2(local_pos, sz), bc, false, bw)
+#
+	## Selection glow (outer rect)
+	#if comp.selected:
+		#cv.draw_rect(Rect2(local_pos - Vector2(3,3), sz + Vector2(6,6)),
+			#Color(1,1,1,0.18), false, 1.0)
+#
+#
+	## Ports (in local rotated space — shape only, no label)
+	#for port in comp.ports:
+		#_draw_port_local(cv, sz, port)
+#
+	## Restore world transform — tất cả text vẽ sau đây đều upright
+	#cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
+#
+	## Port labels — tính world pos của từng port rồi vẽ thẳng, không bị xoay
+	#for port in comp.ports:
+		#var wp  = _port_world_pos(comp, port)
+		#var big = port.get("big", false)
+		#var pc  = port.get("color", Color(0.6, 0.6, 0.6))
+		#var loff = _port_label_offset_world(comp, port, big)
+		#cv.draw_string(ThemeDB.fallback_font, wp + loff,
+			#port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1,
+			#int(9 * zoom_level), pc.lightened(0.35))
+#
+	## Name label
+	#cv.draw_string(ThemeDB.fallback_font,
+		#pos + Vector2(0, sz.y * 0.5 + 5),
+		#comp.name, HORIZONTAL_ALIGNMENT_CENTER, int(sz.x),
+		#int(11 * zoom_level), Color(0.95, 0.95, 0.95))
+
 func _draw_component(comp: Dictionary):
 	var cv  = canvas
 	var pos = comp.pos
@@ -566,6 +618,7 @@ func _draw_component(comp: Dictionary):
 	cv.draw_rect(Rect2(local_pos, sz), col.darkened(0.52), true)
 	# Top accent
 	cv.draw_rect(Rect2(local_pos, Vector2(sz.x, 6)), col, true)
+
 	# Border — bright when selected
 	var bc = Color(1,1,1,0.9) if comp.selected else col.lightened(0.1)
 	var bw = 2.8 if comp.selected else 1.5
@@ -576,6 +629,9 @@ func _draw_component(comp: Dictionary):
 		cv.draw_rect(Rect2(local_pos - Vector2(3,3), sz + Vector2(6,6)),
 			Color(1,1,1,0.18), false, 1.0)
 
+	# NEW — chi tiết PCB riêng cho Flight Controller
+	if comp.name == "Flight Controller":
+		_draw_fc_details(cv, sz)
 
 	# Ports (in local rotated space — shape only, no label)
 	for port in comp.ports:
@@ -601,6 +657,59 @@ func _draw_component(comp: Dictionary):
 		int(11 * zoom_level), Color(0.95, 0.95, 0.95))
 
 
+func _draw_fc_details(cv: Control, sz: Vector2):
+	var half = sz * 0.5
+
+	# --- 4 lỗ bắt vít ở góc (chuẩn mounting FC) ---
+	var hole_pad = 14.0
+	var hole_r   = 4.0
+	var holes = [
+		Vector2(-half.x + hole_pad, -half.y + hole_pad),
+		Vector2( half.x - hole_pad, -half.y + hole_pad),
+		Vector2(-half.x + hole_pad,  half.y - hole_pad),
+		Vector2( half.x - hole_pad,  half.y - hole_pad),
+	]
+	for h in holes:
+		cv.draw_circle(h, hole_r + 1.5, Color(0.75, 0.76, 0.78, 0.9))  # viền kim loại
+		cv.draw_circle(h, hole_r, Color(0.05, 0.05, 0.05))            # lỗ đen
+
+	# --- Đường trace mờ nối chip ra các cạnh ---
+	var trace_col = Color(0.85, 0.85, 0.7, 0.25)
+	cv.draw_line(Vector2(-half.x + 20, 0), Vector2(-16, 0), trace_col, 1.2)
+	cv.draw_line(Vector2( half.x - 20, 0), Vector2( 16, 0), trace_col, 1.2)
+	cv.draw_line(Vector2(0, -half.y + 20), Vector2(0, -16), trace_col, 1.2)
+	cv.draw_line(Vector2(0,  half.y - 20), Vector2(0,  16), trace_col, 1.2)
+
+	# --- Chip trung tâm (MCU/Gyro) ---
+	var chip_size = Vector2(34, 34)
+	var chip_rect = Rect2(-chip_size * 0.5, chip_size)
+	cv.draw_rect(chip_rect, Color(0.03, 0.03, 0.03), true)
+	cv.draw_rect(chip_rect, Color(0.35, 0.35, 0.38), false, 1.2)
+
+	# Chân pin quanh chip
+	var pin_count = 5
+	for side in range(4):
+		for i in range(pin_count):
+			var t = (float(i) + 0.5) / pin_count
+			var pin_pos: Vector2
+			match side:
+				0: pin_pos = Vector2(lerp(-chip_size.x*0.5, chip_size.x*0.5, t), -chip_size.y*0.5 - 2)
+				1: pin_pos = Vector2(lerp(-chip_size.x*0.5, chip_size.x*0.5, t),  chip_size.y*0.5 + 2)
+				2: pin_pos = Vector2(-chip_size.x*0.5 - 2, lerp(-chip_size.y*0.5, chip_size.y*0.5, t))
+				_: pin_pos = Vector2( chip_size.x*0.5 + 2, lerp(-chip_size.y*0.5, chip_size.y*0.5, t))
+			cv.draw_rect(Rect2(pin_pos - Vector2(1.5,1.5), Vector2(3,3)), Color(0.7,0.7,0.72), true)
+
+	# Chấm nhỏ đánh dấu pin 1 (kiểu IC thật)
+	cv.draw_circle(chip_rect.position + Vector2(4,4), 1.6, Color(0.5,0.5,0.5))
+
+	# Chữ in trên chip
+	cv.draw_string(ThemeDB.fallback_font, Vector2(-11, 4), "FC",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.5, 0.55, 0.6))
+
+	# --- Đèn LED trạng thái, có glow ---
+	var led_pos = Vector2(half.x - 10, -half.y + 10)
+	cv.draw_circle(led_pos, 5.0, Color(0.15, 0.85, 1.0, 0.25))  # glow
+	cv.draw_circle(led_pos, 3.0, Color(0.15, 0.85, 1.0, 0.95))  # lõi LED
 
 func _draw_motor(comp: Dictionary):
 	var cv  = canvas
