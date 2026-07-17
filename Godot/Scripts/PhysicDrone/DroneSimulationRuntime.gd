@@ -48,6 +48,8 @@ const ESC_HEAT_GAIN_RATE := 20.0    # tốc độ nóng lên khi overload_severi
 const ESC_HEAT_COOL_RATE := 10.0    # tốc độ nguội khi an toàn -- CHẬM HƠN tốc độ nóng, chủ đích
 const ESC_BURNOUT_THRESHOLD := 100.0
 
+signal preflight_result(report: Dictionary)   # cạnh 2 signal có sẵn
+
 
 # ══════════════════════════ SETUP / SYNC ═══════════════════════════════
 
@@ -104,6 +106,15 @@ func reset_esc_heat() -> void:
 ## (qua _parse_block_stack_into). Runtime CHỈ nhận data thô, không biết gì
 ## về Panel/workspace của Block Editor -- giữ ranh giới sạch giữa 2 module.
 func start(sequence: Array[Dictionary]) -> void:
+	var report := PreflightValidator.run(get_in_drone_placed(), ComponentFactory.COMPONENTS, drone_root)
+	preflight_result.emit(report)
+	for w in report.warnings:
+		log_requested.emit(w.message, "error" if w.severity == "critical" else "warning")
+	if not report.ok:
+		log_requested.emit("Preflight check failed — takeoff aborted.", "error")
+		if sim_label: sim_label.text = "Preflight Failed"
+		if topbar_status: topbar_status.text = "preflight_failed"
+		return
 	sim_sequence = sequence
 	sim_state = "playing"
 	sim_time = 0.0
@@ -481,3 +492,12 @@ func preflight_check() -> Dictionary:
 		cap = "Unstable"
 
 	return {"capability": cap, "reason": "", "tilt_x": tilt_x, "tilt_z": tilt_z}
+
+## Lọc `placed` chỉ giữ component thực sự thuộc drone_root hiện tại — dùng
+## chung cho cả preflight gate (start) lẫn dashboard live-update (Main._update_all).
+func get_in_drone_placed() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for c in placed:
+		if is_instance_valid(c.get("node")) and _is_in_drone(c.node):
+			result.append(c)
+	return result

@@ -69,7 +69,7 @@ static func compute_mass_properties(placed: Array, components: Dictionary, drone
 			# Quy ước CW/CCW chuẩn cấu hình X: 2 góc chéo nhau quay cùng chiều.
 			# (Tạm suy ra từ vị trí vì data hiện chưa có field spin_dir riêng.)
 			var prop_def := _find_attached_propeller_def(comp, placed, components)
-			var thrust_mult: float = prop_def.get("thrust_mult", 1.0)
+			var thrust_mult: float = prop_def.get("thrust_mult", 1.0) if not prop_def.is_empty() else 0.0
 			var prop_kv_range: Vector2 = prop_def.get("kv_range", Vector2(-1, -1))
 			var spin_dir := 1 if (sign(r.x) * sign(r.z)) >= 0.0 else -1
 			motors.append({
@@ -185,3 +185,57 @@ static func _find_attached_propeller_def(comp: Dictionary, placed: Array, compon
 		if item.get("parent_id") == comp_uid and item.get("type", "") == "Propeller":
 			return components.get(item.get("id", ""), {})
 	return {}
+
+## Tổng dòng điện (A) các motor ĐÃ GẮN PROPELLER ở full throttle — dùng cho
+## check dòng xả pin và quá tải ESC. Motor không có prop = không tính, khớp
+## với khái niệm "motors_with_props" đã dùng trong preflight_check().
+static func get_motor_current_draw(placed: Array, components: Dictionary) -> Dictionary:
+	var total_a := 0.0
+	var max_single_a := 0.0
+	var functional_count := 0
+	for comp in placed:
+		var def: Dictionary = components.get(comp.get("id", ""), {})
+		if def.get("type", "") != "Motor":
+			continue
+		var prop_def := _find_attached_propeller_def(comp, placed, components)
+		if prop_def.is_empty():
+			continue
+		var cur: float = def.get("max_current", 0.0)
+		total_a += cur
+		max_single_a = max(max_single_a, cur)
+		functional_count += 1
+	return {"total_a": total_a, "max_single_a": max_single_a, "functional_motor_count": functional_count}
+
+
+## Tổng dung lượng pin (mAh), cộng dồn nếu có nhiều Battery.
+static func get_battery_capacity_mah(placed: Array, components: Dictionary) -> float:
+	var total := 0.0
+	for comp in placed:
+		var def: Dictionary = components.get(comp.get("id", ""), {})
+		if def.get("type", "") == "Battery":
+			total += def.get("capacity", 0.0)
+	return total
+
+
+## Dòng xả tối đa (A) = capacity(Ah) * C-rating, cộng dồn từng viên pin riêng.
+## LƯU Ý: field "current_rating" ở Battery nghĩa là C-RATING (hệ số nhân),
+## KHÁC với "current_rating" ở ESC vốn là AMPS trực tiếp — 2 field trùng tên
+## khác đơn vị, nên cân nhắc đổi tên field Battery thành "c_rating" cho rõ.
+static func get_battery_max_discharge_current(placed: Array, components: Dictionary) -> float:
+	var total_a := 0.0
+	for comp in placed:
+		var def: Dictionary = components.get(comp.get("id", ""), {})
+		if def.get("type", "") == "Battery":
+			var cap_ah: float = def.get("capacity", 0.0) / 1000.0
+			var c_rating: float = def.get("current_rating", 0.0)
+			total_a += cap_ah * c_rating
+	return total_a
+
+
+## current_rating (AMPS) của ESC đầu tiên tìm thấy. 0.0 nếu chưa gắn ESC.
+static func get_esc_current_rating(placed: Array, components: Dictionary) -> float:
+	for comp in placed:
+		var def: Dictionary = components.get(comp.get("id", ""), {})
+		if def.get("type", "") == "ESC":
+			return def.get("current_rating", 0.0)
+	return 0.0
