@@ -52,12 +52,17 @@ const COMP_DEFS := {
 		{"name":"M3","side":"right","offset":0.18,"type":"esc_out","label":"M3","color":Color(0.88,0.45,0.10),"big":false},
 		# Góc dưới-phải
 		{"name":"M4","side":"right","offset":0.82,"type":"esc_out","label":"M4","color":Color(0.88,0.45,0.10),"big":false},
-		# FC signal bus — giữa bên phải
+		# ── Cạnh trên — CHỈ Battery ────────────────────────
+		{"name":"PWR+","side":"top","offset":0.25,"type":"power_pos","label":"+","color":Color(0.88,0.22,0.22),"big":false},
+		{"name":"PWR-","side":"top","offset":0.50,"type":"power_neg","label":"–","color":Color(0.45,0.45,0.45),"big":false},
+		{"name":"GND","side":"top","offset":0.75,"type":"ground","label":"G","color":Color(0.35,0.35,0.35),"big":false},
+
+		# ── Cạnh dưới — TẤT CẢ tín hiệu đi về FC ───────────
+		{"name":"5V","side":"bottom","offset":0.12,"type":"power_5v","label":"5V","color":Color(0.95,0.55,0.15),"big":false},
+		{"name":"VBAT","side":"bottom","offset":0.28,"type":"voltage_sense","label":"VBAT","color":Color(0.65,0.35,0.78),"big":false},
 		{"name":"FC_BUS","side":"bottom","offset":0.50,"type":"signal_out","label":"FC","color":Color(0.22,0.80,0.55),"big":true,"connector_style":"wide_inset"},
-		# Power — trên đỉnh giữa
-		{"name":"PWR+","side":"top","offset":0.38,"type":"power_pos","label":"+","color":Color(0.88,0.22,0.22),"big":false},
-		{"name":"PWR-","side":"top","offset":0.62,"type":"power_neg","label":"–","color":Color(0.45,0.45,0.45),"big":false},
-		{"name":"GND","side":"top","offset":0.80,"type":"ground","label":"G","color":Color(0.35,0.35,0.35),"big":false},
+		{"name":"CURR","side":"bottom","offset":0.72,"type":"current_sense","label":"CURR","color":Color(0.92,0.85,0.25),"big":false},
+		{"name":"TLM","side":"bottom","offset":0.88,"type":"telemetry","label":"TLM","color":Color(0.35,0.65,0.92),"big":false},
 	]
 },
 	"ESC (Single)": {
@@ -78,12 +83,19 @@ const COMP_DEFS := {
 		"size": Vector2(180, 180),
 		"shape": "rect",
 		"ports": [
-			{"name":"S1","side":"bottom","offset":0.20,"type":"pwm_out","label":"S1","color":Color(0.92,0.72,0.10),"big":false},
-			{"name":"S2","side":"bottom","offset":0.36,"type":"pwm_out","label":"S2","color":Color(0.92,0.72,0.10),"big":false},
-			{"name":"S3","side":"bottom","offset":0.52,"type":"pwm_out","label":"S3","color":Color(0.92,0.72,0.10),"big":false},
-			{"name":"S4","side":"bottom","offset":0.68,"type":"pwm_out","label":"S4","color":Color(0.92,0.72,0.10),"big":false},
-			{"name":"GND","side":"bottom","offset":0.86,"type":"ground","label":"G","color":Color(0.35,0.35,0.35),"big":false},
-			{"name":"ESC_BUS","side":"top","offset":0.50,"type":"signal_in","label":"ESC","color":Color(0.22,0.80,0.55),"big":true,"connector_style":"wide_inset"},
+		# ── Cạnh dưới — dùng khi đấu 4 ESC rời (không dùng 4-in-1) ─
+		{"name":"S1","side":"bottom","offset":0.20,"type":"pwm_out","label":"S1","color":Color(0.92,0.72,0.10),"big":false},
+		{"name":"S2","side":"bottom","offset":0.36,"type":"pwm_out","label":"S2","color":Color(0.92,0.72,0.10),"big":false},
+		{"name":"S3","side":"bottom","offset":0.52,"type":"pwm_out","label":"S3","color":Color(0.92,0.72,0.10),"big":false},
+		{"name":"S4","side":"bottom","offset":0.68,"type":"pwm_out","label":"S4","color":Color(0.92,0.72,0.10),"big":false},
+		{"name":"GND","side":"bottom","offset":0.86,"type":"ground","label":"G","color":Color(0.35,0.35,0.35),"big":false},
+
+		# ── Cạnh trên — cụm khớp thẳng hàng với ESC (4-in-1) ─────
+		{"name":"5V_IN","side":"top","offset":0.12,"type":"power_5v_in","label":"5V","color":Color(0.95,0.55,0.15),"big":false},
+		{"name":"VBAT_IN","side":"top","offset":0.28,"type":"voltage_sense_in","label":"VBAT","color":Color(0.65,0.35,0.78),"big":false},
+		{"name":"ESC_BUS","side":"top","offset":0.50,"type":"signal_in","label":"ESC","color":Color(0.22,0.80,0.55),"big":true,"connector_style":"wide_inset"},
+		{"name":"CURR_IN","side":"top","offset":0.72,"type":"current_sense_in","label":"CURR","color":Color(0.92,0.85,0.25),"big":false},
+		{"name":"TLM_IN","side":"top","offset":0.88,"type":"telemetry_in","label":"TLM","color":Color(0.35,0.65,0.92),"big":false},
 		]
 	},
 }
@@ -95,6 +107,11 @@ const COMPATIBLE := [
 	["esc_out",    "motor_phase"],
 	["signal_out", "signal_in"],
 	["pwm_out",    "signal_in"],
+	##moi
+	["power_5v",       "power_5v_in"],       # ESC (BEC out) → FC (nguồn vào)
+	["voltage_sense",  "voltage_sense_in"],  # ESC → FC (đọc áp pin)
+	["current_sense",  "current_sense_in"],  # ESC → FC (đọc dòng điện)
+	["telemetry",      "telemetry_in"],      # ESC → FC (RPM/nhiệt độ)
 ]
 
 # Runtime state
@@ -148,6 +165,7 @@ var selected_uids    : Array   = []   # multi-select list
 var multi_dragging   : bool    = false
 var multi_drag_start : Vector2 = Vector2.ZERO   # screen pos khi bắt đầu drag
 var multi_drag_origins : Dictionary = {}         # uid → world pos ban đầu
+var _wiring_help_layer: CanvasLayer = null
 # ─────────────────────────────── INIT ─────────────────────────────
 func _ready():
 	name = "Wiring"
@@ -179,22 +197,42 @@ func _build_ui():
 	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sv.add_theme_constant_override("separation", 0)
 	scroll.add_child(sv)
-	#var sv = VBoxContainer.new()
-	#sv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	#sv.add_theme_constant_override("separation", 0)
-	#sidebar.add_child(sv)
-	#sidebar.custom_minimum_size = Vector2(178, 0)
-
-
+	#var hdr = Label.new()
+	#hdr.text = "  COMPONENTS"
+	#hdr.add_theme_font_size_override("font_size", 10)
+	#hdr.add_theme_color_override("font_color", Color(0.42, 0.42, 0.50))
+	#hdr.custom_minimum_size = Vector2(0, 38)
+	#hdr.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	#sv.add_child(hdr)
+	var hdr_row = HBoxContainer.new()
+	hdr_row.custom_minimum_size = Vector2(0, 38)
+	sv.add_child(hdr_row)
 
 	var hdr = Label.new()
 	hdr.text = "  COMPONENTS"
 	hdr.add_theme_font_size_override("font_size", 10)
 	hdr.add_theme_color_override("font_color", Color(0.42, 0.42, 0.50))
-	hdr.custom_minimum_size = Vector2(0, 38)
+	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hdr.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	sv.add_child(hdr)
+	hdr_row.add_child(hdr)
 
+	var help_btn = Button.new()
+	help_btn.text = "?"
+	help_btn.custom_minimum_size = Vector2(24, 18)
+	help_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER 
+	help_btn.tooltip_text = "Wiring guide"
+	help_btn.focus_mode = Control.FOCUS_NONE
+	var help_style = StyleBoxFlat.new()
+	help_style.bg_color = Color(0.22, 0.22, 0.26)
+	help_style.set_corner_radius_all(11)
+	help_btn.add_theme_stylebox_override("normal", help_style)
+	help_btn.add_theme_font_size_override("font_size", 12)
+	help_btn.pressed.connect(_open_wiring_help)
+	hdr_row.add_child(help_btn)
+
+	var hdr_pad = Control.new()
+	hdr_pad.custom_minimum_size = Vector2(8, 0)
+	hdr_row.add_child(hdr_pad)
 	var div = Panel.new()
 	div.custom_minimum_size = Vector2(0, 1)
 	var div_sb = StyleBoxFlat.new()
@@ -222,19 +260,6 @@ func _build_ui():
 	canvas.gui_input.connect(_canvas_input)
 
 func _build_category(parent: VBoxContainer, cat: String, items: Array):
-	#var btn = Button.new()
-	#btn.text = "▾  " + cat
-	#btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	#btn.flat = true
-	#btn.add_theme_font_size_override("font_size", 11)
-	#btn.add_theme_color_override("font_color", Color(0.60, 0.60, 0.65))
-	#btn.custom_minimum_size = Vector2(0, 28)
-	#var bsb = StyleBoxFlat.new()
-	#bsb.bg_color = Color(0.16, 0.16, 0.18)
-	#bsb.content_margin_left = 8
-	#for st in ["normal","hover","pressed"]:
-		#btn.add_theme_stylebox_override(st, bsb)
-	#parent.add_child(btn)
 	var btn = Button.new()
 	btn.text = "  ▾   " + cat
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -439,15 +464,6 @@ func _draw_canvas():
 	var sel = _get_selected_comp()
 	if sel.size() > 0:
 		_draw_rotation_toolbar(sel)
-
-	# Tooltip
-	#if wire_tip_text != "" and wire_tip_timer > 0:
-		#var tp_w = max(len(wire_tip_text) * 7.5 + 20, 130.0)
-		#var tp_rect = Rect2(wire_tip_pos + Vector2(14, -36), Vector2(tp_w, 26))
-		#cv.draw_rect(tp_rect, Color(0.12, 0.08, 0.08, 0.96), true)
-		#cv.draw_rect(tp_rect, Color(0.88, 0.22, 0.22, 0.9), false, 1.5)
-		#cv.draw_string(ThemeDB.fallback_font, wire_tip_pos + Vector2(22, -18),
-			#wire_tip_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.65, 0.65))
 	# Tooltip
 	if persistent_error.size() > 0:
 		var msg = persistent_error.text
@@ -549,48 +565,105 @@ func _draw_zoom_indicator():
 		Color(0.75, 0.75, 0.80, alpha))
 
 
+#func _draw_component(comp: Dictionary):
+	#var cv  = canvas
+	#var pos = comp.pos
+	#var sz  = comp.size 
+	#var col = comp.color
+	#var rot = comp.get("rotation_deg", 0)
+#
+	## Push transform for rotation around component center
+	#var ctr = pos + sz * 0.5
+	#cv.draw_set_transform(pan_offset + ctr * zoom_level, deg_to_rad(rot), Vector2(zoom_level, zoom_level))
+	#var local_pos = -sz * 0.5   # draw relative to center
+#
+	## Shadow
+	#cv.draw_rect(Rect2(local_pos + Vector2(4,4), sz), Color(0,0,0,0.4), true)
+	## Body
+	#cv.draw_rect(Rect2(local_pos, sz), col.darkened(0.52), true)
+	## Top accent
+	#cv.draw_rect(Rect2(local_pos, Vector2(sz.x, 6)), col, true)
+#
+	## Border — bright when selected
+	#var bc = Color(1,1,1,0.9) if comp.selected else col.lightened(0.1)
+	#var bw = 2.8 if comp.selected else 1.5
+	#cv.draw_rect(Rect2(local_pos, sz), bc, false, bw)
+#
+	## Selection glow (outer rect)
+	#if comp.selected:
+		#cv.draw_rect(Rect2(local_pos - Vector2(3,3), sz + Vector2(6,6)),
+			#Color(1,1,1,0.18), false, 1.0)
+#
+	## NEW — chi tiết PCB riêng cho Flight Controller
+	#if comp.name == "Flight Controller":
+		#_draw_fc_details(cv, sz)
+	#elif comp.name == "4-in-1 ESC":
+		#_draw_esc_details(cv, sz,comp.ports)
+	## Ports (in local rotated space — shape only, no label)
+	#for port in comp.ports:
+		#_draw_port_local(cv, sz, port)
+#
+	## Restore world transform — tất cả text vẽ sau đây đều upright
+	#cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
+#
+	## Port labels — tính world pos của từng port rồi vẽ thẳng, không bị xoay
+	#for port in comp.ports:
+		#var wp  = _port_world_pos(comp, port)
+		#var big = port.get("big", false)
+		#var pc  = port.get("color", Color(0.6, 0.6, 0.6))
+		#var loff = _port_label_offset_world(comp, port, big)
+		#cv.draw_string(ThemeDB.fallback_font, wp + loff,
+			#port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1,
+			#int(9 * zoom_level), pc.lightened(0.35))
+#
+	## Name label
+	#cv.draw_string(ThemeDB.fallback_font,
+		#pos + Vector2(0, sz.y * 0.5 + 5),
+		#comp.name, HORIZONTAL_ALIGNMENT_CENTER, int(sz.x),
+		#int(11 * zoom_level), Color(0.95, 0.95, 0.95))
 func _draw_component(comp: Dictionary):
 	var cv  = canvas
 	var pos = comp.pos
 	var sz  = comp.size
 	var col = comp.color
 	var rot = comp.get("rotation_deg", 0)
-
-	# Push transform for rotation around component center
 	var ctr = pos + sz * 0.5
 	cv.draw_set_transform(pan_offset + ctr * zoom_level, deg_to_rad(rot), Vector2(zoom_level, zoom_level))
-	var local_pos = -sz * 0.5   # draw relative to center
+	var local_pos = -sz * 0.5
 
-	# Shadow
-	cv.draw_rect(Rect2(local_pos + Vector2(4,4), sz), Color(0,0,0,0.4), true)
-	# Body
-	cv.draw_rect(Rect2(local_pos, sz), col.darkened(0.52), true)
-	# Top accent
-	cv.draw_rect(Rect2(local_pos, Vector2(sz.x, 6)), col, true)
+	# ── Shadow / Body / Border ──────────────────────────
+	if comp.name == "Battery":
+		_draw_battery_body(cv, sz, col, comp.selected)
+	else:
+		# Shadow
+		cv.draw_rect(Rect2(local_pos + Vector2(4,4), sz), Color(0,0,0,0.4), true)
+		# Body
+		cv.draw_rect(Rect2(local_pos, sz), col.darkened(0.52), true)
+		# Top accent
+		cv.draw_rect(Rect2(local_pos, Vector2(sz.x, 6)), col, true)
+		# Border — bright when selected
+		var bc = Color(1,1,1,0.9) if comp.selected else col.lightened(0.1)
+		var bw = 2.8 if comp.selected else 1.5
+		cv.draw_rect(Rect2(local_pos, sz), bc, false, bw)
 
-	# Border — bright when selected
-	var bc = Color(1,1,1,0.9) if comp.selected else col.lightened(0.1)
-	var bw = 2.8 if comp.selected else 1.5
-	cv.draw_rect(Rect2(local_pos, sz), bc, false, bw)
-
-	# Selection glow (outer rect)
+	# Selection glow — chung cho mọi component, kể cả Battery
 	if comp.selected:
 		cv.draw_rect(Rect2(local_pos - Vector2(3,3), sz + Vector2(6,6)),
 			Color(1,1,1,0.18), false, 1.0)
 
-	# NEW — chi tiết PCB riêng cho Flight Controller
+	# Chi tiết riêng từng loại
 	if comp.name == "Flight Controller":
 		_draw_fc_details(cv, sz)
 	elif comp.name == "4-in-1 ESC":
-		_draw_esc_details(cv, sz)
-	# Ports (in local rotated space — shape only, no label)
+		_draw_esc_details(cv, sz, comp.ports)
+	elif comp.name == "Battery":
+		_draw_battery_details(cv, sz, col)
+
+	# Ports (không đổi)
 	for port in comp.ports:
 		_draw_port_local(cv, sz, port)
 
-	# Restore world transform — tất cả text vẽ sau đây đều upright
 	cv.draw_set_transform(pan_offset, 0.0, Vector2(zoom_level, zoom_level))
-
-	# Port labels — tính world pos của từng port rồi vẽ thẳng, không bị xoay
 	for port in comp.ports:
 		var wp  = _port_world_pos(comp, port)
 		var big = port.get("big", false)
@@ -600,12 +673,10 @@ func _draw_component(comp: Dictionary):
 			port.get("label", port.name), HORIZONTAL_ALIGNMENT_CENTER, -1,
 			int(9 * zoom_level), pc.lightened(0.35))
 
-	# Name label
 	cv.draw_string(ThemeDB.fallback_font,
 		pos + Vector2(0, sz.y * 0.5 + 5),
 		comp.name, HORIZONTAL_ALIGNMENT_CENTER, int(sz.x),
 		int(11 * zoom_level), Color(0.95, 0.95, 0.95))
-
 
 func _draw_fc_details(cv: Control, sz: Vector2):
 	var half = sz * 0.5
@@ -1211,12 +1282,6 @@ func _try_connect(from: Dictionary, to: Dictionary):
 		}
 	else:
 		persistent_error.clear()
-	#if not ok:
-		#_show_tip("⚠ Incompatible: " + ft + " ↔ " + tt, _world_to_screen(from.pos))
-	#else:
-		#wire_tip_text = ""
-
-
 	canvas.queue_redraw()
 
 func _delete_component(uid: int):
@@ -1316,6 +1381,10 @@ func _wire_color(t: String) -> Color:
 		"esc_out","motor_phase": return Color(0.88, 0.50, 0.10)
 		"signal_out","signal_in": return Color(0.22, 0.82, 0.55)
 		"pwm_out":     return Color(0.92, 0.78, 0.10)
+		"power_5v","power_5v_in":         return Color(0.95, 0.55, 0.15)
+		"voltage_sense","voltage_sense_in": return Color(0.65, 0.35, 0.78)
+		"current_sense","current_sense_in": return Color(0.92, 0.85, 0.25)
+		"telemetry","telemetry_in":         return Color(0.35, 0.65, 0.92)
 	return Color(0.6, 0.6, 0.6)
 
 func _snap_to_grid(pos: Vector2) -> Vector2:
@@ -1370,21 +1439,19 @@ func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
 
 func is_wiring_complete() -> Dictionary:
 	var result = {"ok": false, "reason": ""}
-	
-	# Kiểm tra có đủ components cần thiết không
+
 	var has_battery = false
 	var has_esc = false
 	var has_fc = false
 	var motor_count = 0
-	
-	
+
 	for comp in canvas_components:
 		match comp.name:
 			"Battery": has_battery = true
 			"4-in-1 ESC": has_esc = true
 			"Flight Controller": has_fc = true
 			"Motor": motor_count += 1
-	
+
 	if not has_battery:
 		result.reason = "Wiring: No battery in circuit"
 		return result
@@ -1397,54 +1464,69 @@ func is_wiring_complete() -> Dictionary:
 	if motor_count == 0:
 		result.reason = "Wiring: No motors in circuit"
 		return result
-	
-	# Kiểm tra connections bắt buộc
-	var bat_to_esc = false      # Battery+ → ESC PWR+
+
+	# Connections bắt buộc
+	var bat_to_esc = false      # Battery → ESC (PWR+/PWR-/GND, cạnh trên)
 	var esc_to_fc = false       # ESC FC_BUS → FC ESC_BUS
+	var esc_5v_to_fc = false    # ESC 5V (BEC) → FC power — bắt buộc, FC cần sống
 	var motors_connected = 0    # ESC M1-M4 → Motor PHASE
-	var esc_gnd_to_fc = false   # ESC GND → FC GND
-	
+
+	# Connections tùy chọn (không chặn "ok")
+	var esc_vbat_to_fc = false
+	var esc_curr_to_fc = false
+	var esc_tlm_to_fc = false
+
 	for conn in connections:
 		if not conn.get("valid", false):
 			continue
-		
+
 		var fn = conn.from_comp.name
 		var tn = conn.to_comp.name
 		var fp = conn.from_port.name
 		var tp = conn.to_port.name
-		
-		# Battery → ESC power
+
+		# Battery → ESC power (cạnh trên: PWR+, PWR-, GND)
 		if (fn == "Battery" and tn == "4-in-1 ESC") or (fn == "4-in-1 ESC" and tn == "Battery"):
-			if fp in ["BAT+","BAT-","PWR+","PWR-"] or tp in ["BAT+","BAT-","PWR+","PWR-"]:
+			if fp in ["BAT+","BAT-","PWR+","PWR-","GND"] or tp in ["BAT+","BAT-","PWR+","PWR-","GND"]:
 				bat_to_esc = true
-		
-		# ESC → FC signal
+
+		# ESC → FC (cạnh dưới: 5V, VBAT, FC_BUS, CURR, TLM)
 		if (fn == "4-in-1 ESC" and tn == "Flight Controller") or (fn == "Flight Controller" and tn == "4-in-1 ESC"):
 			if fp in ["FC_BUS","ESC_BUS"] or tp in ["FC_BUS","ESC_BUS"]:
 				esc_to_fc = true
-			if fp == "GND" or tp == "GND":
-				esc_gnd_to_fc = true
-		
+			if fp == "5V" or tp == "5V":
+				esc_5v_to_fc = true
+			if fp == "VBAT" or tp == "VBAT":
+				esc_vbat_to_fc = true
+			if fp == "CURR" or tp == "CURR":
+				esc_curr_to_fc = true
+			if fp == "TLM" or tp == "TLM":
+				esc_tlm_to_fc = true
+
 		# ESC → Motor
 		if (fn == "4-in-1 ESC" and tn == "Motor") or (fn == "Motor" and tn == "4-in-1 ESC"):
 			motors_connected += 1
-	
+
 	if not bat_to_esc:
 		result.reason = "Wiring: Battery not connected to ESC"
 		return result
 	if not esc_to_fc:
 		result.reason = "Wiring: ESC not connected to Flight Controller"
 		return result
-	if not esc_gnd_to_fc:
-		result.reason = "Wiring: ESC GND not connected to Flight Controller GND"
+	if not esc_5v_to_fc:
+		result.reason = "Wiring: ESC 5V (BEC) not connected to Flight Controller"
 		return result
 	if motors_connected < motor_count:
 		result.reason = "Wiring: %d/%d motors connected to ESC" % [motors_connected, motor_count]
 		return result
-	
-	result.ok = true
-	return result
 
+	result.ok = true
+	result.optional = {
+		"vbat": esc_vbat_to_fc,
+		"current": esc_curr_to_fc,
+		"telemetry": esc_tlm_to_fc,
+	}
+	return result
 # ─────────────────────────────── BEND HELPERS ─────────────────────
 func _hit_bend_point(mp: Vector2) -> Dictionary:
 	var wmp = _screen_to_world(mp)
@@ -1666,14 +1748,12 @@ func _find_port_by_name(comp: Dictionary, port_name: String) -> Dictionary:
 		if p.name == port_name:
 			return p
 	return {}
-func _draw_esc_details(cv: CanvasItem, sz: Vector2) -> void:
+func _draw_esc_details(cv: CanvasItem, sz: Vector2,ports: Array) -> void:
 	var w := sz.x
 	var h := sz.y
 	var l := -w * 0.5
 	var t := -h * 0.5
 
-	var gold      := Color(0.85, 0.68, 0.25)
-	var gold_dark := Color(0.55, 0.42, 0.12)
 	var chip_col  := Color(0.05, 0.05, 0.07)
 	var chip_edge := Color(0.25, 0.25, 0.28)
 	var silver    := Color(0.75, 0.75, 0.78)
@@ -1681,35 +1761,6 @@ func _draw_esc_details(cv: CanvasItem, sz: Vector2) -> void:
 	var silk      := Color(0.65, 0.68, 0.72, 0.85)
 
 	var min_side: float = minf(w, h)   # <-- minf() thay vì min()
-
-	# ---- 1. 4 lỗ ốc góc ----
-	var off := Vector2(w, h) * 0.12
-	var corners := [
-		{"pos": Vector2(l, t) + off,                        "label": "4"},
-		{"pos": Vector2(l + w, t) + Vector2(-off.x, off.y), "label": "2"},
-		{"pos": Vector2(l, t + h) + Vector2(off.x, -off.y), "label": "3"},
-		{"pos": Vector2(l + w, t + h) - off,                "label": "1"},
-	]
-	for c in corners:
-		var p: Vector2 = c.pos
-		var r: float = min_side * 0.085
-		cv.draw_circle(p, r, gold_dark)
-		cv.draw_circle(p, r * 0.62, Color(0, 0, 0, 0.55))
-		cv.draw_arc(p, r, 0, TAU, 24, gold, 2.0)
-		cv.draw_string(ThemeDB.fallback_font, p - Vector2(3, -3), c.label,
-			HORIZONTAL_ALIGNMENT_CENTER, -1, 10, Color(0.9, 0.9, 0.9, 0.8))
-
-	# ---- 2. Dãy pad vàng răng lược 2 bên ----
-	var scallop_r := h * 0.028
-	var scallop_count := 6
-	for side_x in [l, l + w]:
-		var y0 := t + h * 0.22
-		var y1 := t + h * 0.78
-		for i in range(scallop_count):
-			var ty: float = lerp(y0, y1, float(i) / float(scallop_count - 1))
-			cv.draw_circle(Vector2(side_x, ty), scallop_r, gold)
-			cv.draw_circle(Vector2(side_x, ty), scallop_r * 0.55, gold_dark)
-
 	# ---- 3. Cụm MOSFET đen dọc 2 bên ----
 	var mos_w := w * 0.16
 	var mos_h := h * 0.09
@@ -1759,8 +1810,273 @@ func _draw_esc_details(cv: CanvasItem, sz: Vector2) -> void:
 		cv.draw_arc(cp, cr, 0, TAU, 16, Color(0.4, 0.4, 0.42), 1.0)
 
 	# ---- 7. Nhãn silkscreen ----
-	var labels := ["GND", "VCC", "BAT", "CURR"]
-	for i in range(labels.size()):
-		var lx: float = lerp(l + w * 0.18, l + w * 0.82, float(i) / 3.0)
-		cv.draw_string(ThemeDB.fallback_font, Vector2(lx, t + h * 0.09), labels[i],
+	# ---- 7. Nhãn silkscreen — LẤY THẲNG TỪ PORTS "top" HIỆN CÓ ----
+	var silk_text := {
+		"PWR+": "VCC",
+		"PWR-": "BAT",
+		"GND":  "GND",
+		"VBAT": "VBAT",
+		"CURR": "CURR",
+	}
+	for port in ports:
+		if port.get("side", "") != "top":
+			continue
+		var offset: float = port.get("offset", 0.5)
+		var lx: float = l + w * offset
+		var text: String = silk_text.get(port.name, port.get("label", port.name))
+		cv.draw_string(ThemeDB.fallback_font, Vector2(lx, t + h * 0.09), text,
 			HORIZONTAL_ALIGNMENT_CENTER, -1, 8, silk)
+func _open_wiring_help() -> void:
+	if is_instance_valid(_wiring_help_layer):
+		return  # đã mở, tránh mở chồng
+
+	_wiring_help_layer = CanvasLayer.new()
+	_wiring_help_layer.layer = 100
+	add_child(_wiring_help_layer)
+
+	# Nền mờ — click ra ngoài để đóng
+	var dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_close_wiring_help()
+	)
+	_wiring_help_layer.add_child(dim)
+
+	var center = CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.add_child(center)
+
+	var modal = PanelContainer.new()
+	modal.mouse_filter = Control.MOUSE_FILTER_STOP  # chặn click xuyên xuống dim
+	var modal_style = StyleBoxFlat.new()
+	modal_style.bg_color = Color(0.13, 0.13, 0.16)
+	modal_style.border_color = Color(0.28, 0.28, 0.32)
+	modal_style.set_border_width_all(1)
+	modal_style.set_corner_radius_all(8)
+	modal_style.content_margin_left = 18
+	modal_style.content_margin_right = 18
+	modal_style.content_margin_top = 14
+	modal_style.content_margin_bottom = 14
+	modal.add_theme_stylebox_override("panel", modal_style)
+	center.add_child(modal)
+
+	var _resize_modal = func():
+		if not is_instance_valid(modal): return
+		var vp = get_viewport().get_visible_rect().size
+		modal.custom_minimum_size = Vector2(
+			clamp(vp.x * 0.6, 320, 620),
+			clamp(vp.y * 0.75, 300, 640)
+		)
+	_resize_modal.call()
+	get_viewport().size_changed.connect(_resize_modal)
+	_wiring_help_layer.tree_exiting.connect(func():
+		if get_viewport().size_changed.is_connected(_resize_modal):
+			get_viewport().size_changed.disconnect(_resize_modal)
+	)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	modal.add_child(vbox)
+
+	# Header: tiêu đề + nút đóng
+	var head_row = HBoxContainer.new()
+	vbox.add_child(head_row)
+	var title = Label.new()
+	title.text = "Hướng dẫn đấu dây"
+	title.add_theme_font_size_override("font_size", 16)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head_row.add_child(title)
+	var close_btn = Button.new()
+	close_btn.text = "✕"
+	close_btn.focus_mode = Control.FOCUS_NONE
+	close_btn.custom_minimum_size = Vector2(26, 26)
+	close_btn.pressed.connect(_close_wiring_help)
+	head_row.add_child(close_btn)
+
+	var div2 = Panel.new()
+	div2.custom_minimum_size = Vector2(0, 1)
+	var div2_sb = StyleBoxFlat.new()
+	div2_sb.bg_color = Color(0.24, 0.24, 0.28)
+	div2.add_theme_stylebox_override("panel", div2_sb)
+	vbox.add_child(div2)
+
+	# Nội dung cuộn được
+	var scroll = ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+
+	var content = VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 14)
+	scroll.add_child(content)
+
+	_add_help_section(content, "Sơ đồ đấu dây", _build_wiring_diagram())
+	_add_help_text_section(content, "Kết nối chân (pin-to-pin)", [
+		"• FC → ESC: tín hiệu PWM/DShot theo từng kênh motor",
+		"• ESC → Motor: 3 dây pha (A, B, C), đảo 2 dây bất kỳ nếu quay sai chiều",
+		"• Battery → ESC: dây nguồn (+)/(-) qua giắc XT60/XT30",
+		"• FC → Battery: dây đo áp, nếu ESC không có BEC báo áp tích hợp",
+	])
+	_add_help_text_section(content, "Các bước kết nối", [
+		"1. Gắn Frame, xác định vị trí 4 motor theo cấu hình X",
+		"2. Lắp Motor vào từng góc, cố định ESC gần motor tương ứng",
+		"3. Nối 3 dây pha Motor → ESC",
+		"4. Nối tín hiệu ESC → FC đúng thứ tự kênh (motor mixing)",
+		"5. Cấp nguồn Battery → ESC, kiểm tra cực tính trước khi cắm",
+		"6. Gắn Propeller đúng chiều xoay (CW/CCW) theo từng góc",
+	])
+	content.add_child(_build_safety_note(
+		"⚠ Luôn kiểm tra cực tính (+/-) trước khi cắm pin. Đấu ngược cực có thể " +
+		"cháy ESC/FC ngay lập tức. Tháo cánh quạt khi test motor không tải."
+	))
+
+
+func _close_wiring_help() -> void:
+	if is_instance_valid(_wiring_help_layer):
+		_wiring_help_layer.queue_free()
+	_wiring_help_layer = null
+func _add_help_section(parent: VBoxContainer, title_text: String, body: Control) -> void:
+	var section = VBoxContainer.new()
+	section.add_theme_constant_override("separation", 6)
+	var lbl = Label.new()
+	lbl.text = title_text
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+	section.add_child(lbl)
+	section.add_child(body)
+	parent.add_child(section)
+
+func _add_help_text_section(parent: VBoxContainer, title_text: String, lines: Array) -> void:
+	var section = VBoxContainer.new()
+	section.add_theme_constant_override("separation", 4)
+	var lbl = Label.new()
+	lbl.text = title_text
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+	section.add_child(lbl)
+	for line in lines:
+		var l = Label.new()
+		l.text = line
+		l.add_theme_font_size_override("font_size", 12)
+		l.add_theme_color_override("font_color", Color(0.8, 0.8, 0.85))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD
+		section.add_child(l)
+	parent.add_child(section)
+
+func _build_safety_note(text: String) -> Control:
+	var box = PanelContainer.new()
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.35, 0.18, 0.05, 0.35)
+	style.border_color = Color(0.9, 0.55, 0.15)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(4)
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
+	box.add_theme_stylebox_override("panel", style)
+	var lbl = Label.new()
+	lbl.text = text
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+	lbl.add_theme_font_size_override("font_size", 12)
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.7))
+	box.add_child(lbl)
+	return box
+
+func _build_wiring_diagram() -> Control:
+	var wrap = CenterContainer.new()
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var diagram = Control.new()
+	diagram.custom_minimum_size = Vector2(480, 150)
+	diagram.draw.connect(_draw_wiring_diagram.bind(diagram))
+	wrap.add_child(diagram)
+	return wrap
+
+func _draw_wiring_diagram(diagram: Control) -> void:
+	var box_size = Vector2(110, 40)
+	var battery_pos = Vector2(10, 55)
+	var esc_pos     = Vector2(185, 55)
+	var motor_pos   = Vector2(360, 55)
+	var fc_pos      = Vector2(185, 5)
+
+	var box_color = Color(0.20, 0.20, 0.24)
+	var border    = Color(0.4, 0.75, 0.95)
+	var text_col  = Color(0.85, 0.85, 0.9)
+	var font: Font = ThemeDB.fallback_font
+	var font_size := 12
+
+	for b in [
+		{"pos": battery_pos, "label": "Battery"},
+		{"pos": esc_pos,     "label": "ESC"},
+		{"pos": motor_pos,   "label": "Motor"},
+		{"pos": fc_pos,      "label": "FC"},
+	]:
+		var r = Rect2(b.pos, box_size)
+		diagram.draw_rect(r, box_color, true)
+		diagram.draw_rect(r, border, false, 1.5)
+		var text_size = font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+		var text_pos = b.pos + box_size * 0.5 - text_size * 0.5 + Vector2(0, text_size.y * 0.3)
+		diagram.draw_string(font, text_pos, b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, text_col)
+
+	var arrow_col = Color(0.9, 0.6, 0.2)
+	_draw_arrow(diagram, battery_pos + Vector2(box_size.x, box_size.y * 0.5), esc_pos + Vector2(0, box_size.y * 0.5), arrow_col)
+	_draw_arrow(diagram, esc_pos + Vector2(box_size.x, box_size.y * 0.5), motor_pos + Vector2(0, box_size.y * 0.5), arrow_col)
+	_draw_arrow(diagram, fc_pos + Vector2(box_size.x * 0.5, box_size.y), esc_pos + Vector2(box_size.x * 0.5, 0), Color(0.5, 0.85, 0.5))
+
+func _draw_arrow(diagram: Control, from: Vector2, to: Vector2, color: Color) -> void:
+	diagram.draw_line(from, to, color, 2.0)
+	var dir = (to - from).normalized()
+	var perp = Vector2(-dir.y, dir.x)
+	var head := 6.0
+	diagram.draw_line(to, to - dir * head + perp * head * 0.6, color, 2.0)
+	diagram.draw_line(to, to - dir * head - perp * head * 0.6, color, 2.0)
+func _draw_battery_body(cv: CanvasItem, sz: Vector2, col: Color, selected: bool) -> void:
+	var local_pos = -sz * 0.5
+	var radius := 8
+
+	# Shadow (bo góc)
+	var sb_shadow := StyleBoxFlat.new()
+	sb_shadow.bg_color = Color(0, 0, 0, 0.35)
+	sb_shadow.set_corner_radius_all(radius)
+	cv.draw_style_box(sb_shadow, Rect2(local_pos + Vector2(4, 4), sz))
+
+	# Body (bo góc)
+	var sb_body := StyleBoxFlat.new()
+	sb_body.bg_color = col.darkened(0.55)
+	sb_body.set_corner_radius_all(radius)
+	cv.draw_style_box(sb_body, Rect2(local_pos, sz))
+
+	# Border (bo góc)
+	var sb_border := StyleBoxFlat.new()
+	sb_border.bg_color = Color(0, 0, 0, 0)
+	sb_border.set_corner_radius_all(radius)
+	sb_border.set_border_width_all(3 if selected else 1.5)
+	sb_border.border_color = Color(1, 1, 1, 0.9) if selected else col.lightened(0.1)
+	cv.draw_style_box(sb_border, Rect2(local_pos, sz))
+
+
+func _draw_battery_details(cv: CanvasItem, sz: Vector2, col: Color) -> void:
+	var local_pos = -sz * 0.5
+	var pad := 6.0
+	var inner := Rect2(local_pos + Vector2(pad, pad), sz - Vector2(pad * 2, pad * 2))
+
+	# Panel vỏ pin (sáng hơn body 1 chút)
+	var sb_wrap := StyleBoxFlat.new()
+	sb_wrap.bg_color = col.darkened(0.28)
+	sb_wrap.set_corner_radius_all(5)
+	cv.draw_style_box(sb_wrap, inner)
+
+	# Các vạch dọc mô phỏng nhãn cuốn quanh pin LiPo
+	var stripe_color := col.lightened(0.15)
+	stripe_color.a = 0.55
+	var n_stripes := 4
+	var gap := inner.size.x / float(n_stripes + 1)
+	for i in range(n_stripes):
+		var x = inner.position.x + gap * (i + 1)
+		cv.draw_rect(Rect2(Vector2(x - 2, inner.position.y + 4), Vector2(4, inner.size.y - 8)),
+			stripe_color, true)

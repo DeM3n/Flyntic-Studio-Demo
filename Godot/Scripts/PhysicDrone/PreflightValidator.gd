@@ -66,8 +66,9 @@ static func run(placed: Array, components: Dictionary, drone_root: Node3D) -> Di
 	var current := DronePhysicsModel.get_motor_current_draw(placed, components)
 	var battery_capacity_mah := DronePhysicsModel.get_battery_capacity_mah(placed, components)
 	var battery_max_discharge_a := DronePhysicsModel.get_battery_max_discharge_current(placed, components) * BATTERY_C_SAFETY_MARGIN
-
-	if battery_max_discharge_a > 0.0 and current.total_a > battery_max_discharge_a:
+	var hover_throttle: float = clamp(1.0 / max(twr, 0.01), HOVER_THROTTLE_FLOOR, 1.0)
+	var hover_current_a: float = current.total_a * hover_throttle
+	if battery_max_discharge_a > 0.0 and hover_current_a > battery_max_discharge_a:
 		warnings.append(_w("critical", "battery_discharge_insufficient", "Battery discharge rate is insufficient."))
 
 	var esc_rating_a := DronePhysicsModel.get_esc_current_rating(placed, components)
@@ -85,8 +86,7 @@ static func run(placed: Array, components: Dictionary, drone_root: Node3D) -> Di
 		warnings.append(_w("warning", "cg_offset_warning", "Center of Gravity is slightly offset — trim recommended."))
 
 	# Flight time / payload: chỉ là số tham khảo, KHÔNG sinh warning.
-	var hover_throttle: float = clamp(1.0 / max(twr, 0.01), HOVER_THROTTLE_FLOOR, 1.0)
-	var hover_current_a: float = current.total_a * hover_throttle
+
 	var flight_time_min := 0.0
 	if hover_current_a > 0.01 and battery_capacity_mah > 0.0:
 		flight_time_min = (battery_capacity_mah / 1000.0) * BATTERY_USABLE_FRACTION / hover_current_a * 60.0
